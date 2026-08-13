@@ -17,17 +17,17 @@ readonly INSTALL_CAUSA_LIB_LOADED=1
 install_causa() {
     log_section_silent "Installing Causa Backend"
 
+    if [[ "${DRY_RUN}" == "true" ]]; then
+        write_to_log_file "INFO" "Dry run — skipping apply"
+        return 0
+    fi
+
     if ! create_namespace; then return 1; fi
 
     local manifest="${SCRIPT_DIR}/manifests/causa/deployment.yaml"
     local img="${CAUSA_BACKEND_IMAGE}"
 
     write_to_log_file "INFO" "Using image: ${img}"
-
-    if [[ "${DRY_RUN}" == "true" ]]; then
-        write_to_log_file "INFO" "Dry run — skipping apply"
-        return 0
-    fi
 
     # Delete any existing deployment so stale replicasets don't accumulate
     # and new pods always get the latest secret bindings
