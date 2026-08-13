@@ -63,7 +63,7 @@ manifests/          # Kubernetes resource definitions
 
 | Doc | What's in it |
 |---|---|
-| [Installation Guide](docs/installation.md) | Full install steps, prerequisites, uninstall, re-install |
+| [Installation Guide](docs/installation.md) | Full install steps, prerequisites, uninstall, reinstall |
 | [Configuration](docs/configuration.md) | All CLI flags, env vars, image overrides, and defaults |
 | [Architecture](docs/architecture.md) | How the installer works internally, component wiring, alert flow |
 | [Troubleshooting](docs/troubleshooting.md) | Status checks, log locations, common errors |
