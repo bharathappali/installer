@@ -1,0 +1,31 @@
+
+# ── Log files ─────────────────────────────────────────────────────────────
+*.log
+install.log
+
+# ── Temporary files created by the installer ──────────────────────────────
+/tmp/
+*.tmp
+
+# ── macOS metadata ─────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ── Editor / IDE ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Bob IDE internal folders (not project config) ─────────────────────────
+# Keep: .bob/mcp.json, .bob/settings/ (project MCP config)
+# Ignore: .bob/artifacts/ (generated HTML reports)
+.bob/artifacts/
+
+# ── Shell script generated temp manifests ─────────────────────────────────
+# These are written to /tmp/ by the installer — listed here as documentation
+# /tmp/causa-rca-manifest-*.yaml  (handled by mktemp, not in repo)
+# /tmp/kind-config-*.yaml         (handled by mktemp, not in repo)
+# /tmp/causa-prometheus-values-*.yaml (handled by mktemp, not in repo)
