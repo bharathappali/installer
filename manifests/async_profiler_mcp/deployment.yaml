@@ -1,0 +1,65 @@
+---
+# Async Profiler MCP Server — deployment
+# Namespace placeholder: PLACEHOLDER_NAMESPACE  (replaced by installer at apply time)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: async-profiler-mcp
+  namespace: PLACEHOLDER_NAMESPACE
+  labels:
+    app: async-profiler-mcp
+    app.kubernetes.io/component: profiler-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: async-profiler-mcp
+  template:
+    metadata:
+      labels:
+        app: async-profiler-mcp
+    spec:
+      serviceAccountName: async-profiler-mcp
+      containers:
+        - name: async-profiler-mcp
+          image: quay.io/causaai/async-profiler-mcp:latest
+          ports:
+            - containerPort: 8083
+              name: http
+              protocol: TCP
+          env:
+            - name: ASYNC_PROFILER_URL
+              value: "http://async-profiler.PLACEHOLDER_NAMESPACE.svc.cluster.local:8082"
+            - name: MCP_SERVER_PORT
+              value: "8083"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: async-profiler-mcp
+  namespace: PLACEHOLDER_NAMESPACE
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: async-profiler-mcp
+  namespace: PLACEHOLDER_NAMESPACE
+  labels:
+    app: async-profiler-mcp
+spec:
+  type: NodePort
+  ports:
+    - port: 8083
+      targetPort: 8083
+      protocol: TCP
+      name: http
+      nodePort: 30003
+  selector:
+    app: async-profiler-mcp
