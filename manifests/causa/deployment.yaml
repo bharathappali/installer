@@ -1,0 +1,117 @@
+---
+# Causa Backend — deployment
+# Namespace placeholder: PLACEHOLDER_NAMESPACE  (replaced by installer at apply time)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: causa-backend
+  namespace: PLACEHOLDER_NAMESPACE
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: causa-backend
+  namespace: PLACEHOLDER_NAMESPACE
+  labels:
+    app: causa-backend
+    app.kubernetes.io/name: causa-backend
+    app.kubernetes.io/component: rca-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: causa-backend
+  template:
+    metadata:
+      labels:
+        app: causa-backend
+    spec:
+      serviceAccountName: causa-backend
+      containers:
+        - name: causa-backend
+          # Image resolved from CAUSA_BACKEND_IMAGE / lib/images.env
+          image: quay.io/causaai/causa-backend:latest
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          env:
+            # ----------------------------------------------------------------
+            # MCP server endpoints — update once each server is deployed
+            # ----------------------------------------------------------------
+            - name: CAUSA_MCP_K8S_ENDPOINT
+              value: "http://kubernetes-mcp-server.PLACEHOLDER_NAMESPACE.svc.cluster.local:8080"
+            - name: CAUSA_MCP_ASYNC_PROFILER_ENDPOINT
+              value: "http://async-profiler-mcp.PLACEHOLDER_NAMESPACE.svc.cluster.local:8083"
+            - name: CAUSA_MCP_QUARKUS_ENDPOINT
+              value: "http://quarkus-mcp.PLACEHOLDER_NAMESPACE.svc.cluster.local:8084"
+            # ----------------------------------------------------------------
+            # LLM configuration (optional — app starts without it)
+            # Set via kubectl create secret or helm values in production
+            # ----------------------------------------------------------------
+            - name: LLM_PROVIDER
+              value: ""
+            - name: LLM_API_KEY
+              value: ""
+            - name: LLM_MODEL_NAME
+              value: ""
+            - name: LLM_TEMPERATURE
+              value: "0.1"
+            # ----------------------------------------------------------------
+            # Cluster identity
+            # ----------------------------------------------------------------
+            - name: CLUSTER_TYPE
+              value: "kind"
+            - name: CAUSA_LOG_LEVEL
+              value: "INFO"
+          envFrom:
+            - secretRef:
+                name: causa-db-secrets
+                optional: false
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - curl -s http://localhost:8080/api/v1/healthz | grep -q "database.*UP"
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - curl -s http://localhost:8080/api/v1/healthz | grep -q "database.*UP"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: causa-backend
+  namespace: PLACEHOLDER_NAMESPACE
+  labels:
+    app: causa-backend
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+      nodePort: 30001
+  selector:
+    app: causa-backend

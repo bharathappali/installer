@@ -1,0 +1,97 @@
+---
+# PostgreSQL with pgvector — deployment
+# Namespace placeholder: PLACEHOLDER_NAMESPACE  (replaced by installer at apply time)
+#
+# Single-instance Postgres for Kind cluster use.
+# Database: iri-db  |  User: causa_backend
+# Credentials are written to the 'causa-db-secrets' Secret by the installer.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  namespace: PLACEHOLDER_NAMESPACE
+type: Opaque
+stringData:
+  POSTGRES_DB: iri-db
+  POSTGRES_USER: causa_backend
+  POSTGRES_PASSWORD: causa_backend_pass
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-initdb
+  namespace: PLACEHOLDER_NAMESPACE
+data:
+  init-vector.sql: |
+    CREATE EXTENSION IF NOT EXISTS vector;
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: PLACEHOLDER_NAMESPACE
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg17
+          ports:
+            - containerPort: 5432
+              name: postgres
+          envFrom:
+            - secretRef:
+                name: postgres-credentials
+          args:
+            - -c
+            - shared_preload_libraries=vector
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "causa_backend", "-d", "iri-db"]
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 12
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: postgres-data
+          emptyDir: {}
+        - name: initdb
+          configMap:
+            name: postgres-initdb
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: PLACEHOLDER_NAMESPACE
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgres
+  selector:
+    app: postgres

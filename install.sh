@@ -63,6 +63,9 @@ source "${SCRIPT_DIR}/lib/logging.sh"
 source "${SCRIPT_DIR}/lib/install_utils.sh"
 source "${SCRIPT_DIR}/lib/validator.sh"
 source "${SCRIPT_DIR}/lib/install_kind_cluster.sh"
+source "${SCRIPT_DIR}/lib/install_k8s_mcp.sh"
+source "${SCRIPT_DIR}/lib/install_postgres.sh"
+source "${SCRIPT_DIR}/lib/install_causa.sh"
 
 enable_cleanup_trap
 enable_spinner_trap
@@ -139,6 +142,36 @@ main() {
     local installed_components=()
     installed_components+=("Kind Cluster (${KIND_CLUSTER_NAME})")
 
+    start_spinner "Installing Kubernetes MCP Server..."
+    if ! install_kubernetes_mcp_server; then
+        stop_spinner
+        log_error "Failed to install Kubernetes MCP Server"
+        exit 1
+    fi
+    stop_spinner
+    log_install_success "Kubernetes MCP Server"
+    installed_components+=("Kubernetes MCP Server")
+
+    start_spinner "Installing PostgreSQL..."
+    if ! install_postgres; then
+        stop_spinner
+        log_error "Failed to install PostgreSQL"
+        exit 1
+    fi
+    stop_spinner
+    log_install_success "PostgreSQL"
+    installed_components+=("PostgreSQL")
+
+    start_spinner "Installing Causa Backend..."
+    if ! install_causa; then
+        stop_spinner
+        log_error "Failed to install Causa Backend"
+        exit 1
+    fi
+    stop_spinner
+    log_install_success "Causa Backend"
+    installed_components+=("Causa Backend")
+
     {
         echo ""
         echo -e "${COLOR_CYAN}${COLOR_BOLD}========================================${COLOR_RESET}"
@@ -162,6 +195,22 @@ uninstall_main() {
     local start_time; start_time=$(date +%s)
 
     log_file_only "Starting Causa RCA uninstallation..."
+
+    start_spinner "Uninstalling Causa Backend..."
+    if ! uninstall_causa; then
+        stop_spinner; log_error "Failed to uninstall Causa Backend"; exit 1
+    fi
+    stop_spinner; log_uninstall_success "Causa Backend"
+
+    start_spinner "Uninstalling PostgreSQL..."
+    uninstall_postgres
+    stop_spinner; log_uninstall_success "PostgreSQL"
+
+    start_spinner "Uninstalling Kubernetes MCP Server..."
+    if ! uninstall_kubernetes_mcp_server; then
+        stop_spinner; log_error "Failed to uninstall Kubernetes MCP Server"; exit 1
+    fi
+    stop_spinner; log_uninstall_success "Kubernetes MCP Server"
 
     if _is_kind_target; then
         if [[ "${DELETE_CLUSTER:-false}" == "true" ]]; then
