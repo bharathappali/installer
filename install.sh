@@ -164,6 +164,11 @@ main() {
         fi
     fi
 
+    if ! validate_rbac_permissions; then
+        log_error "RBAC permissions check failed"
+        exit 1
+    fi
+
     if ! validate_image_overrides; then
         log_error "Image validation failed"
         exit 1
