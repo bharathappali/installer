@@ -3,7 +3,13 @@
 ################################################################################
 # Causa RCA Installer — Main Orchestrator
 #
-# Provisions the Kind cluster and local registry.
+# Provisions the target environment and deploys the full RCA stack:
+#   - Kubernetes MCP Server
+#   - Causa Backend (RCA engine)
+#   - Async Profiler
+#   - Async Profiler MCP Server
+#   - Quarkus MCP Server
+#   - Causa MCP Server
 #
 # Usage:
 #   ./install.sh [OPTIONS]
@@ -19,46 +25,71 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export SCRIPT_DIR
 
+# ---------------------------------------------------------------------------
+# Source images.env FIRST — defines image defaults; can be overridden by
+# CLI flags or exported env vars (priority: CLI > export > images.env)
+# ---------------------------------------------------------------------------
 IMAGES_ENV_FILE="${SCRIPT_DIR}/lib/images.env"
 if [[ -f "${IMAGES_ENV_FILE}" ]]; then
     # shellcheck source=lib/images.env
     source "${IMAGES_ENV_FILE}"
 fi
 
+# ---------------------------------------------------------------------------
+# Global configuration defaults
+# ---------------------------------------------------------------------------
 MANIFESTS_DIR="${SCRIPT_DIR}/manifests"
 
+# Namespace where all RCA components are deployed
 INSTALL_NAMESPACE="${INSTALL_NAMESPACE:-causa-rca}"
 export INSTALL_NAMESPACE
 
+# Cluster CLI
 KUBE_CLI="${KUBE_CLI:-kubectl}"
 export KUBE_CLI
 
+# Target platform — determines which infrastructure steps run.
+# Supported values: kind
+# kind  → creates a Kind cluster + local registry (no Prometheus — RCA is triggered on demand via Bob)
 INSTALL_TARGET="${INSTALL_TARGET:-kind}"
 export INSTALL_TARGET
 
+# Behaviour flags
 DRY_RUN="${DRY_RUN:-false}"
 TERMINATE="${TERMINATE:-false}"
 export DRY_RUN TERMINATE
 
+# Kind cluster settings (consumed by lib/install_kind_cluster.sh)
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-causa-rca}"
 KIND_REGISTRY_NAME="${KIND_REGISTRY_NAME:-causa-rca-registry}"
 KIND_REGISTRY_PORT="${KIND_REGISTRY_PORT:-5001}"
 export KIND_CLUSTER_NAME KIND_REGISTRY_NAME KIND_REGISTRY_PORT
 
+# Image variables (populated by images.env; can be overridden via CLI flags)
 K8S_MCP_SERVER_IMAGE="${K8S_MCP_SERVER_IMAGE:-}"
 CAUSA_BACKEND_IMAGE="${CAUSA_BACKEND_IMAGE:-}"
+ASYNC_PROFILER_IMAGE="${ASYNC_PROFILER_IMAGE:-}"
+ASYNC_PROFILER_MCP_IMAGE="${ASYNC_PROFILER_MCP_IMAGE:-}"
 QUARKUS_MCP_IMAGE="${QUARKUS_MCP_IMAGE:-}"
 CAUSA_MCP_IMAGE="${CAUSA_MCP_IMAGE:-}"
 export K8S_MCP_SERVER_IMAGE CAUSA_BACKEND_IMAGE
+export ASYNC_PROFILER_IMAGE ASYNC_PROFILER_MCP_IMAGE
 export QUARKUS_MCP_IMAGE CAUSA_MCP_IMAGE
 
+# Sentinel flags — set to "true" only when a CLI flag explicitly overrides an image
 K8S_MCP_SERVER_IMAGE_OVERRIDDEN=false
 CAUSA_BACKEND_IMAGE_OVERRIDDEN=false
+ASYNC_PROFILER_IMAGE_OVERRIDDEN=false
+ASYNC_PROFILER_MCP_IMAGE_OVERRIDDEN=false
 QUARKUS_MCP_IMAGE_OVERRIDDEN=false
 CAUSA_MCP_IMAGE_OVERRIDDEN=false
 export K8S_MCP_SERVER_IMAGE_OVERRIDDEN CAUSA_BACKEND_IMAGE_OVERRIDDEN
+export ASYNC_PROFILER_IMAGE_OVERRIDDEN ASYNC_PROFILER_MCP_IMAGE_OVERRIDDEN
 export QUARKUS_MCP_IMAGE_OVERRIDDEN CAUSA_MCP_IMAGE_OVERRIDDEN
 
+# ---------------------------------------------------------------------------
+# Source library files
+# ---------------------------------------------------------------------------
 source "${SCRIPT_DIR}/lib/logging.sh"
 source "${SCRIPT_DIR}/lib/install_utils.sh"
 source "${SCRIPT_DIR}/lib/validator.sh"
@@ -66,10 +97,20 @@ source "${SCRIPT_DIR}/lib/install_kind_cluster.sh"
 source "${SCRIPT_DIR}/lib/install_k8s_mcp.sh"
 source "${SCRIPT_DIR}/lib/install_postgres.sh"
 source "${SCRIPT_DIR}/lib/install_causa.sh"
+source "${SCRIPT_DIR}/lib/install_async_profiler.sh"
+source "${SCRIPT_DIR}/lib/install_async_profiler_mcp.sh"
+source "${SCRIPT_DIR}/lib/install_quarkus_mcp.sh"
+source "${SCRIPT_DIR}/lib/install_causa_mcp.sh"
 
-enable_cleanup_trap
-enable_spinner_trap
+# ---------------------------------------------------------------------------
+# Activate opt-in traps (scoped here, not in shared libraries)
+# ---------------------------------------------------------------------------
+enable_cleanup_trap   # lib/install_utils.sh — log error on unexpected EXIT
+enable_spinner_trap   # lib/logging.sh       — stop spinner cleanly on INT/TERM
 
+# ---------------------------------------------------------------------------
+# Logging initialisation
+# ---------------------------------------------------------------------------
 initialize_logging() {
     LOG_FILE="${SCRIPT_DIR}/install.log"
     if [[ "${TERMINATE:-false}" == "true" ]]; then
@@ -86,10 +127,16 @@ initialize_logging() {
     fi
 }
 
+################################################################################
+# _is_kind_target — returns 0 when the install target is kind
+################################################################################
 _is_kind_target() {
     [[ "${INSTALL_TARGET}" == "kind" ]]
 }
 
+################################################################################
+# main — install
+################################################################################
 main() {
     local start_time; start_time=$(date +%s)
 
@@ -102,6 +149,7 @@ main() {
         write_to_log_file "INFO" "Registry:       localhost:${KIND_REGISTRY_PORT}"
     fi
 
+    # ── Pre-flight checks ────────────────────────────────────────────────────
     log_section "Pre-installation Validation"
 
     if ! validate_prerequisites; then
@@ -121,6 +169,7 @@ main() {
         exit 1
     fi
 
+    # ── Step 1: Kind cluster + local registry (kind target only) ────────────
     if _is_kind_target; then
         start_spinner "Provisioning Kind cluster and local registry..."
         if ! install_kind_cluster; then
@@ -132,6 +181,8 @@ main() {
         log_install_success "Kind Cluster (${KIND_CLUSTER_NAME})"
     fi
 
+    # After cluster is ready, validate connectivity
+    # Skip for dry-run on kind target — the cluster doesn't exist yet
     if [[ "${DRY_RUN}" != "true" ]] || ! _is_kind_target; then
         if ! validate_cluster_access; then
             log_error "Cluster access check failed"
@@ -139,9 +190,10 @@ main() {
         fi
     fi
 
+    # ── Track installed components ───────────────────────────────────────────
     local installed_components=()
-    installed_components+=("Kind Cluster (${KIND_CLUSTER_NAME})")
 
+    # ── Step 2: Kubernetes MCP Server ───────────────────────────────────────
     start_spinner "Installing Kubernetes MCP Server..."
     if ! install_kubernetes_mcp_server; then
         stop_spinner
@@ -152,6 +204,40 @@ main() {
     log_install_success "Kubernetes MCP Server"
     installed_components+=("Kubernetes MCP Server")
 
+    # ── Step 4: Async Profiler ───────────────────────────────────────────────
+    start_spinner "Installing Async Profiler..."
+    if ! install_async_profiler; then
+        stop_spinner
+        log_warn "Async Profiler installation skipped or failed"
+    else
+        stop_spinner
+        log_install_success "Async Profiler"
+        installed_components+=("Async Profiler")
+    fi
+
+    # ── Step 5: Async Profiler MCP Server ────────────────────────────────────
+    start_spinner "Installing Async Profiler MCP Server..."
+    if ! install_async_profiler_mcp; then
+        stop_spinner
+        log_warn "Async Profiler MCP Server installation skipped or failed"
+    else
+        stop_spinner
+        log_install_success "Async Profiler MCP Server"
+        installed_components+=("Async Profiler MCP Server")
+    fi
+
+    # ── Step 6: Quarkus MCP Server ───────────────────────────────────────────
+    start_spinner "Installing Quarkus MCP Server..."
+    if ! install_quarkus_mcp; then
+        stop_spinner
+        log_warn "Quarkus MCP Server installation skipped or failed"
+    else
+        stop_spinner
+        log_install_success "Quarkus MCP Server"
+        installed_components+=("Quarkus MCP Server")
+    fi
+
+    # ── Step 7: PostgreSQL ───────────────────────────────────────────────────
     start_spinner "Installing PostgreSQL..."
     if ! install_postgres; then
         stop_spinner
@@ -162,6 +248,7 @@ main() {
     log_install_success "PostgreSQL"
     installed_components+=("PostgreSQL")
 
+    # ── Step 8: Causa Backend ────────────────────────────────────────────────
     start_spinner "Installing Causa Backend..."
     if ! install_causa; then
         stop_spinner
@@ -172,6 +259,18 @@ main() {
     log_install_success "Causa Backend"
     installed_components+=("Causa Backend")
 
+    # ── Step 9: Causa MCP Server ─────────────────────────────────────────────
+    start_spinner "Installing Causa MCP Server..."
+    if ! install_causa_mcp; then
+        stop_spinner
+        log_warn "Causa MCP Server installation skipped or failed"
+    else
+        stop_spinner
+        log_install_success "Causa MCP Server"
+        installed_components+=("Causa MCP Server")
+    fi
+
+    # ── Post-install summary ─────────────────────────────────────────────────
     {
         echo ""
         echo -e "${COLOR_CYAN}${COLOR_BOLD}========================================${COLOR_RESET}"
@@ -185,16 +284,41 @@ main() {
     } >/dev/tty 2>/dev/null || true
 
     local elapsed; elapsed=$(calculate_elapsed_label "${start_time}")
+
+    post_component_validation "${elapsed}"
+
+    # ── Port-forward instructions ────────────────────────────────────────────
+    _print_access_summary
+
     write_to_log_file "SUCCESS" "Installation completed in ${elapsed}"
     if [[ -n "${LOG_FILE:-}" ]]; then
         write_to_log_file "INFO" "Log: ${LOG_FILE}"
     fi
 }
 
+################################################################################
+# uninstall_main — teardown
+################################################################################
 uninstall_main() {
     local start_time; start_time=$(date +%s)
 
     log_file_only "Starting Causa RCA uninstallation..."
+
+    start_spinner "Uninstalling Causa MCP Server..."
+    uninstall_causa_mcp
+    stop_spinner; log_uninstall_success "Causa MCP Server"
+
+    start_spinner "Uninstalling Quarkus MCP Server..."
+    uninstall_quarkus_mcp
+    stop_spinner; log_uninstall_success "Quarkus MCP Server"
+
+    start_spinner "Uninstalling Async Profiler MCP Server..."
+    uninstall_async_profiler_mcp
+    stop_spinner; log_uninstall_success "Async Profiler MCP Server"
+
+    start_spinner "Uninstalling Async Profiler..."
+    uninstall_async_profiler
+    stop_spinner; log_uninstall_success "Async Profiler"
 
     start_spinner "Uninstalling Causa Backend..."
     if ! uninstall_causa; then
@@ -212,6 +336,7 @@ uninstall_main() {
     fi
     stop_spinner; log_uninstall_success "Kubernetes MCP Server"
 
+    # Optionally delete the Kind cluster entirely
     if _is_kind_target; then
         if [[ "${DELETE_CLUSTER:-false}" == "true" ]]; then
             start_spinner "Deleting Kind cluster ${KIND_CLUSTER_NAME}..."
@@ -238,6 +363,29 @@ uninstall_main() {
     exit 0
 }
 
+################################################################################
+# _print_access_summary
+################################################################################
+_print_access_summary() {
+    {
+        echo ""
+        echo -e "${COLOR_CYAN}${COLOR_BOLD}========================================${COLOR_RESET}"
+        echo -e "${COLOR_CYAN}${COLOR_BOLD}Access Summary${COLOR_RESET}"
+        echo -e "${COLOR_CYAN}${COLOR_BOLD}========================================${COLOR_RESET}"
+        echo ""
+        echo -e "${COLOR_GREEN}Causa Backend API  :${COLOR_RESET}  http://localhost:30001/api/v1/diagnostics"
+        echo -e "${COLOR_GREEN}Causa MCP Server   :${COLOR_RESET}  http://localhost:30005/mcp"
+        echo ""
+        if [[ -n "${LOG_FILE:-}" ]]; then
+            echo -e "${COLOR_CYAN}Log file:${COLOR_RESET} ${LOG_FILE}"
+        fi
+        echo ""
+    } >/dev/tty 2>/dev/null || true
+}
+
+################################################################################
+# show_usage
+################################################################################
 show_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
@@ -259,6 +407,8 @@ show_usage() {
     echo "IMAGE OVERRIDE OPTIONS:"
     echo "    --k8s-mcp-server-image IMAGE              Override Kubernetes MCP Server image"
     echo "    --causa-backend-image IMAGE                Override Causa Backend image"
+    echo "    --async-profiler-image IMAGE               Override Async Profiler image"
+    echo "    --async-profiler-mcp-image IMAGE           Override Async Profiler MCP Server image"
     echo "    --quarkus-mcp-image IMAGE                  Override Quarkus MCP Server image"
     echo "    --causa-mcp-image IMAGE                    Override Causa MCP Server image"
     echo ""
@@ -292,6 +442,9 @@ show_usage() {
     echo ""
 }
 
+################################################################################
+# parse_arguments
+################################################################################
 parse_arguments() {
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -325,6 +478,12 @@ parse_arguments() {
             --causa-backend-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --causa-backend-image"; show_usage; exit 2; }
                 CAUSA_BACKEND_IMAGE="$2"; CAUSA_BACKEND_IMAGE_OVERRIDDEN=true; shift 2 ;;
+            --async-profiler-image)
+                [[ -z "${2:-}" ]] && { log_error "Value required for --async-profiler-image"; show_usage; exit 2; }
+                ASYNC_PROFILER_IMAGE="$2"; ASYNC_PROFILER_IMAGE_OVERRIDDEN=true; shift 2 ;;
+            --async-profiler-mcp-image)
+                [[ -z "${2:-}" ]] && { log_error "Value required for --async-profiler-mcp-image"; show_usage; exit 2; }
+                ASYNC_PROFILER_MCP_IMAGE="$2"; ASYNC_PROFILER_MCP_IMAGE_OVERRIDDEN=true; shift 2 ;;
             --quarkus-mcp-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --quarkus-mcp-image"; show_usage; exit 2; }
                 QUARKUS_MCP_IMAGE="$2"; QUARKUS_MCP_IMAGE_OVERRIDDEN=true; shift 2 ;;
@@ -339,9 +498,12 @@ parse_arguments() {
     done
 }
 
+################################################################################
+# Entry point
+################################################################################
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    initialize_logging
     parse_arguments "$@"
+    initialize_logging
 
     if [[ "${TERMINATE}" == "true" ]]; then
         uninstall_main
