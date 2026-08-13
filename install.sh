@@ -5,9 +5,10 @@
 #
 # Provisions the target environment and deploys the full RCA stack:
 #   - Kubernetes MCP Server
-#   - Causa Backend (RCA engine)
 #   - Jafra MCP Server
 #   - Quarkus MCP Server
+#   - PostgreSQL
+#   - Causa Backend (RCA engine)
 #   - Causa MCP Server
 #
 # Usage:
@@ -459,6 +460,9 @@ parse_arguments() {
             --causa-backend-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --causa-backend-image"; show_usage; exit 2; }
                 CAUSA_BACKEND_IMAGE="$2"; CAUSA_BACKEND_IMAGE_OVERRIDDEN=true; shift 2 ;;
+            --jafra-mcp-image)
+                [[ -z "${2:-}" ]] && { log_error "Value required for --jafra-mcp-image"; show_usage; exit 2; }
+                JAFRA_MCP_IMAGE="$2"; JAFRA_MCP_IMAGE_OVERRIDDEN=true; shift 2 ;;
             --quarkus-mcp-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --quarkus-mcp-image"; show_usage; exit 2; }
                 QUARKUS_MCP_IMAGE="$2"; QUARKUS_MCP_IMAGE_OVERRIDDEN=true; shift 2 ;;
