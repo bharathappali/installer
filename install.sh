@@ -346,8 +346,8 @@ parse_arguments() {
 # Entry point
 ################################################################################
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    parse_arguments "$@"
     initialize_logging
+    parse_arguments "$@"
 
     if [[ "${TERMINATE}" == "true" ]]; then
         uninstall_main
