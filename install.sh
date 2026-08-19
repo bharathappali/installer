@@ -5,9 +5,6 @@
 #
 # Provisions the Kind cluster and local registry.
 #
-# What this PR adds:
-#   - Kind cluster + local registry (lib/install_kind_cluster.sh)
-#
 # Usage:
 #   ./install.sh [OPTIONS]
 #
@@ -65,23 +62,17 @@ export KIND_CLUSTER_NAME KIND_REGISTRY_NAME KIND_REGISTRY_PORT
 # Image variables (populated by images.env; can be overridden via CLI flags)
 K8S_MCP_SERVER_IMAGE="${K8S_MCP_SERVER_IMAGE:-}"
 CAUSA_BACKEND_IMAGE="${CAUSA_BACKEND_IMAGE:-}"
-ASYNC_PROFILER_IMAGE="${ASYNC_PROFILER_IMAGE:-}"
-ASYNC_PROFILER_MCP_IMAGE="${ASYNC_PROFILER_MCP_IMAGE:-}"
 QUARKUS_MCP_IMAGE="${QUARKUS_MCP_IMAGE:-}"
 CAUSA_MCP_IMAGE="${CAUSA_MCP_IMAGE:-}"
 export K8S_MCP_SERVER_IMAGE CAUSA_BACKEND_IMAGE
-export ASYNC_PROFILER_IMAGE ASYNC_PROFILER_MCP_IMAGE
 export QUARKUS_MCP_IMAGE CAUSA_MCP_IMAGE
 
 # Sentinel flags — set to "true" only when a CLI flag explicitly overrides an image
 K8S_MCP_SERVER_IMAGE_OVERRIDDEN=false
 CAUSA_BACKEND_IMAGE_OVERRIDDEN=false
-ASYNC_PROFILER_IMAGE_OVERRIDDEN=false
-ASYNC_PROFILER_MCP_IMAGE_OVERRIDDEN=false
 QUARKUS_MCP_IMAGE_OVERRIDDEN=false
 CAUSA_MCP_IMAGE_OVERRIDDEN=false
 export K8S_MCP_SERVER_IMAGE_OVERRIDDEN CAUSA_BACKEND_IMAGE_OVERRIDDEN
-export ASYNC_PROFILER_IMAGE_OVERRIDDEN ASYNC_PROFILER_MCP_IMAGE_OVERRIDDEN
 export QUARKUS_MCP_IMAGE_OVERRIDDEN CAUSA_MCP_IMAGE_OVERRIDDEN
 
 # ---------------------------------------------------------------------------
@@ -268,8 +259,6 @@ show_usage() {
     echo "IMAGE OVERRIDE OPTIONS:"
     echo "    --k8s-mcp-server-image IMAGE              Override Kubernetes MCP Server image"
     echo "    --causa-backend-image IMAGE                Override Causa Backend image"
-    echo "    --async-profiler-image IMAGE               Override Async Profiler image"
-    echo "    --async-profiler-mcp-image IMAGE           Override Async Profiler MCP Server image"
     echo "    --quarkus-mcp-image IMAGE                  Override Quarkus MCP Server image"
     echo "    --causa-mcp-image IMAGE                    Override Causa MCP Server image"
     echo ""
@@ -339,12 +328,6 @@ parse_arguments() {
             --causa-backend-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --causa-backend-image"; show_usage; exit 2; }
                 CAUSA_BACKEND_IMAGE="$2"; CAUSA_BACKEND_IMAGE_OVERRIDDEN=true; shift 2 ;;
-            --async-profiler-image)
-                [[ -z "${2:-}" ]] && { log_error "Value required for --async-profiler-image"; show_usage; exit 2; }
-                ASYNC_PROFILER_IMAGE="$2"; ASYNC_PROFILER_IMAGE_OVERRIDDEN=true; shift 2 ;;
-            --async-profiler-mcp-image)
-                [[ -z "${2:-}" ]] && { log_error "Value required for --async-profiler-mcp-image"; show_usage; exit 2; }
-                ASYNC_PROFILER_MCP_IMAGE="$2"; ASYNC_PROFILER_MCP_IMAGE_OVERRIDDEN=true; shift 2 ;;
             --quarkus-mcp-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --quarkus-mcp-image"; show_usage; exit 2; }
                 QUARKUS_MCP_IMAGE="$2"; QUARKUS_MCP_IMAGE_OVERRIDDEN=true; shift 2 ;;

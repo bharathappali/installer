@@ -83,7 +83,6 @@ _start_local_registry() {
 # The config enables:
 #   - Local registry mirror
 #   - Extra port mappings for NodePort services (30000-30005)
-#   - SYS_PTRACE for async-profiler container attach
 # ---------------------------------------------------------------------------
 _write_kind_config() {
     local config_file; config_file=$(mktemp /tmp/kind-config-XXXXXX.yaml)
@@ -106,20 +105,12 @@ nodes:
       - containerPort: 30001   # Causa Backend
         hostPort: 30001
         protocol: TCP
-      - containerPort: 30002   # Async Profiler
-        hostPort: 30002
-        protocol: TCP
-      - containerPort: 30003   # Async Profiler MCP
-        hostPort: 30003
-        protocol: TCP
       - containerPort: 30004   # Quarkus MCP
         hostPort: 30004
         protocol: TCP
       - containerPort: 30005   # Causa MCP
         hostPort: 30005
         protocol: TCP
-    # kubeadm patch: allow SYS_PTRACE in default namespaces
-    # (required by async-profiler to attach to JVM inside pods)
     kubeadmConfigPatches:
       - |
         kind: ClusterConfiguration
