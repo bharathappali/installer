@@ -44,8 +44,6 @@ Priority order (highest to lowest):
 |---|---|
 | `--k8s-mcp-server-image IMAGE` | Kubernetes MCP Server |
 | `--causa-backend-image IMAGE` | Causa Backend |
-| `--async-profiler-image IMAGE` | Async Profiler |
-| `--async-profiler-mcp-image IMAGE` | Async Profiler MCP Server |
 | `--quarkus-mcp-image IMAGE` | Quarkus MCP Server |
 | `--causa-mcp-image IMAGE` | Causa MCP Server |
 
@@ -55,8 +53,6 @@ Priority order (highest to lowest):
 |---|---|
 | `K8S_MCP_SERVER_IMAGE` | Kubernetes MCP Server |
 | `CAUSA_BACKEND_IMAGE` | Causa Backend |
-| `ASYNC_PROFILER_IMAGE` | Async Profiler |
-| `ASYNC_PROFILER_MCP_IMAGE` | Async Profiler MCP Server |
 | `QUARKUS_MCP_IMAGE` | Quarkus MCP Server |
 | `CAUSA_MCP_IMAGE` | Causa MCP Server |
 
@@ -68,9 +64,7 @@ Priority order (highest to lowest):
 
 # Override multiple images
 ./install.sh \
-  --async-profiler-image     quay.io/causaai/async-profiler:v0.1.0 \
-  --async-profiler-mcp-image quay.io/causaai/async-profiler-mcp:v0.1.0 \
-  --quarkus-mcp-image        quay.io/causaai/quarkus-mcp:v0.1.0
+  --quarkus-mcp-image quay.io/causaai/quarkus-mcp:v0.1.0
 
 # Override via environment variable
 export CAUSA_MCP_IMAGE=quay.io/causaai/causa-mcp:v0.1.0

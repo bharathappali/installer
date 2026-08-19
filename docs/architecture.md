@@ -18,16 +18,12 @@ lib/
   install_prometheus.sh                 ← kube-prometheus-stack + Alertmanager webhook
   install_k8s_mcp.sh                    ← Kubernetes MCP Server
   install_causa.sh                      ← Causa Backend
-  install_async_profiler.sh             ← Async Profiler
-  install_async_profiler_mcp.sh         ← Async Profiler MCP Server
   install_quarkus_mcp.sh                ← Quarkus MCP Server
   install_causa_mcp.sh                  ← Causa MCP Server
 manifests/
   prometheus/prometheusrule.yaml        ← workload-agnostic alert rules
   k8s_mcp_server.yaml                   ← Kubernetes MCP Server (NodePort 30000)
   causa/deployment.yaml                 ← Causa Backend (NodePort 30001)
-  async_profiler/deployment.yaml        ← Async Profiler (NodePort 30002)
-  async_profiler_mcp/deployment.yaml    ← Async Profiler MCP Server (NodePort 30003)
   quarkus_mcp/deployment.yaml           ← Quarkus MCP Server (NodePort 30004)
   causa_mcp/deployment.yaml             ← Causa MCP Server (NodePort 30005)
 ```

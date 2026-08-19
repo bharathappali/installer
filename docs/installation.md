@@ -52,11 +52,10 @@ Components are deployed in this sequence:
 1. Kind cluster + local registry
 2. Prometheus Stack (kube-prometheus-stack + Alertmanager webhook)
 3. Kubernetes MCP Server
-4. Causa Backend
-5. Async Profiler
-6. Async Profiler MCP Server
-7. Quarkus MCP Server
-8. Causa MCP Server
+4. Quarkus MCP Server
+5. PostgreSQL
+6. Causa Backend
+7. Causa MCP Server
 
 ## Uninstallation
 
