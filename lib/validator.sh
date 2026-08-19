@@ -220,8 +220,6 @@ validate_image_overrides() {
 
     _vi "${K8S_MCP_SERVER_IMAGE}"          "--k8s-mcp-server-image"       "${K8S_MCP_SERVER_IMAGE_OVERRIDDEN:-false}"
     _vi "${CAUSA_BACKEND_IMAGE}"           "--causa-backend-image"        "${CAUSA_BACKEND_IMAGE_OVERRIDDEN:-false}"
-    _vi "${ASYNC_PROFILER_IMAGE}"          "--async-profiler-image"       "${ASYNC_PROFILER_IMAGE_OVERRIDDEN:-false}"
-    _vi "${ASYNC_PROFILER_MCP_IMAGE}"      "--async-profiler-mcp-image"   "${ASYNC_PROFILER_MCP_IMAGE_OVERRIDDEN:-false}"
     _vi "${QUARKUS_MCP_IMAGE}"             "--quarkus-mcp-image"          "${QUARKUS_MCP_IMAGE_OVERRIDDEN:-false}"
     _vi "${CAUSA_MCP_IMAGE}"               "--causa-mcp-image"            "${CAUSA_MCP_IMAGE_OVERRIDDEN:-false}"
 
@@ -276,12 +274,10 @@ post_component_validation() {
         fi
     }
 
-    local k8s_mcp_status causa_status async_ctrl_status async_mcp_status quarkus_status causa_mcp_status
+    local k8s_mcp_status causa_status quarkus_status causa_mcp_status
 
     _check_deployment "Kubernetes MCP Server"    "kubernetes-mcp-server"  k8s_mcp_status
     _check_deployment "Causa Backend"            "causa-backend"          causa_status
-    _check_deployment "Async Profiler"           "async-profiler"         async_ctrl_status
-    _check_deployment "Async Profiler MCP"       "async-profiler-mcp"     async_mcp_status
     _check_deployment "Quarkus MCP Server"       "mcp-metrics"            quarkus_status
     _check_deployment "Causa MCP Server"         "causa-mcp"              causa_mcp_status
 
@@ -291,8 +287,6 @@ post_component_validation() {
         echo ""
         echo -e "${k8s_mcp_status}"
         echo -e "${causa_status}"
-        echo -e "${async_ctrl_status}"
-        echo -e "${async_mcp_status}"
         echo -e "${quarkus_status}"
         echo -e "${causa_mcp_status}"
         echo ""
