@@ -58,7 +58,6 @@ detect_os() {
     case "$OSTYPE" in
         linux-gnu*) echo "linux" ;;
         darwin*)    echo "darwin" ;;
-        msys*|cygwin*) echo "windows" ;;
         *) handle_error ${EXIT_GENERAL_ERROR} "Unsupported OS type: $OSTYPE" ;;
     esac
 }
@@ -69,8 +68,6 @@ detect_arch() {
     case "${arch}" in
         x86_64|amd64)   echo "amd64" ;;
         aarch64|arm64)  echo "arm64" ;;
-        ppc64le)        echo "ppc64le" ;;
-        s390x)          echo "s390x" ;;
         *) handle_error ${EXIT_GENERAL_ERROR} "Unsupported architecture: ${arch}" ;;
     esac
 }
