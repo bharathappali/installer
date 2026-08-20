@@ -142,25 +142,6 @@ validate_cluster_access() {
 }
 
 ################################################################################
-# validate_rbac_permissions
-# Basic check — ensures the current user can create namespaces.
-################################################################################
-validate_rbac_permissions() {
-    log_file_only "Validating RBAC permissions"
-
-    # Kind clusters created by the user are typically cluster-admin — just
-    # do a lightweight can-i check rather than a full RBAC audit.
-    if ! ${KUBE_CLI} auth can-i create namespaces &>/dev/null; then
-        log_warn "Cannot verify 'create namespaces' permission — proceeding anyway (Kind clusters are typically admin)"
-    else
-        write_to_log_file "SUCCESS" "RBAC: create namespaces — allowed"
-    fi
-
-    log_validation_success "Validating RBAC Permissions"
-    return 0
-}
-
-################################################################################
 # validate_image_format_silent
 # Validates image format for images loaded from images.env (silent on success).
 ################################################################################
@@ -308,7 +289,6 @@ post_component_validation() {
 export -f validate_prerequisites
 export -f validate_docker_running
 export -f validate_cluster_access
-export -f validate_rbac_permissions
 export -f validate_image_format_silent
 export -f validate_image_format
 export -f validate_image_overrides
