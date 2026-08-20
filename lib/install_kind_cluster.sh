@@ -111,12 +111,6 @@ nodes:
       - containerPort: 30005   # Causa MCP
         hostPort: 30005
         protocol: TCP
-    kubeadmConfigPatches:
-      - |
-        kind: ClusterConfiguration
-        apiServer:
-          extraArgs:
-            allow-privileged: "true"
 EOF
     echo "${config_file}"
 }
