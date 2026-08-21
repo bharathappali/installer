@@ -186,7 +186,12 @@ install_kind_cluster() {
         kind_config=$(_write_kind_config)
         write_to_log_file "INFO" "Creating Kind cluster '${KIND_CLUSTER_NAME}'..."
 
-        if ! kind create cluster --config "${kind_config}" >>"${LOG_FILE}" 2>&1; then
+        # Force Kind to use the same container runtime the installer detected.
+        # Without this, Kind on a machine that has both Docker and Podman installed
+        # may silently pick Podman even when Docker was detected — causing kubelet
+        # cgroup failures under the Podman provider on macOS.
+        if ! KIND_EXPERIMENTAL_PROVIDER="${CONTAINER_RUNTIME}" \
+                kind create cluster --config "${kind_config}" >>"${LOG_FILE}" 2>&1; then
             log_error "Failed to create Kind cluster '${KIND_CLUSTER_NAME}'"
             rm -f "${kind_config}"
             return 1
