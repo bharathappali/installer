@@ -45,24 +45,28 @@ _kind_registry_running() {
     ${CONTAINER_RUNTIME:-docker} inspect --format='{{.State.Running}}' "${KIND_REGISTRY_NAME}" 2>/dev/null | grep -q "true"
 }
 
-# ---------------------------------------------------------------------------
-# _start_local_registry
-# Starts a local Docker registry on localhost:KIND_REGISTRY_PORT.
-# Idempotent: does nothing if already running.
-# ---------------------------------------------------------------------------
+# Returns 0 if the registry container exists (running or stopped)
+_kind_registry_exists() {
+    ${CONTAINER_RUNTIME:-docker} inspect "${KIND_REGISTRY_NAME}" &>/dev/null
+}
+
+# _start_local_registry — idempotent; removes a stopped container before starting fresh
 _start_local_registry() {
     if _kind_registry_running; then
         write_to_log_file "INFO" "Local registry '${KIND_REGISTRY_NAME}' is already running"
         return 0
     fi
 
+    if _kind_registry_exists; then
+        write_to_log_file "INFO" "Removing stopped registry container '${KIND_REGISTRY_NAME}'..."
+        ${CONTAINER_RUNTIME:-docker} rm -f "${KIND_REGISTRY_NAME}" >>"${LOG_FILE:-/dev/null}" 2>&1 || true
+    fi
+
     write_to_log_file "INFO" "Starting local registry (localhost:${KIND_REGISTRY_PORT})..."
     local runtime="${CONTAINER_RUNTIME:-docker}"
     local restart_flag="--restart=always"
-    # podman run does not support --restart=always in the same way; use 'unless-stopped' equivalent
     [[ "${runtime}" == "podman" ]] && restart_flag=""
 
-    # Use the runtime's default network for Podman; 'bridge' for Docker.
     local network_flag="--network bridge"
     [[ "${runtime}" == "podman" ]] && network_flag=""
 
@@ -77,49 +81,47 @@ _start_local_registry() {
     return 0
 }
 
-# ---------------------------------------------------------------------------
-# _write_kind_config
-# Writes a Kind cluster config YAML to a temp file and prints the path.
-# The config enables:
-#   - Local registry mirror
-#   - Extra port mappings for NodePort services (30000-30005)
-# ---------------------------------------------------------------------------
+# _write_kind_config — writes cluster config YAML to a temp file and prints the path
 _write_kind_config() {
     local config_file; config_file=$(mktemp /tmp/kind-config-XXXXXX.yaml)
     cat > "${config_file}" << EOF
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 name: ${KIND_CLUSTER_NAME}
-# Mirror localhost:KIND_REGISTRY_PORT so Kind nodes can pull from it
 containerdConfigPatches:
   - |-
-    [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:${KIND_REGISTRY_PORT}"]
-      endpoint = ["http://${KIND_REGISTRY_NAME}:5000"]
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"
+    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+      SystemdCgroup = false
+    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.test-handler.options]
+      SystemdCgroup = false
+kubeadmConfigPatches:
+  - |
+    kind: KubeletConfiguration
+    apiVersion: kubelet.config.k8s.io/v1beta1
+    cgroupDriver: cgroupfs
 nodes:
   - role: control-plane
-    # NodePort mappings — each component exposes one NodePort in 30000-30005
+    image: kindest/node:v1.31.14
     extraPortMappings:
-      - containerPort: 30000   # Kubernetes MCP Server
+      - containerPort: 30000
         hostPort: 30000
         protocol: TCP
-      - containerPort: 30001   # Causa Backend
+      - containerPort: 30001
         hostPort: 30001
         protocol: TCP
-      - containerPort: 30004   # Quarkus MCP
+      - containerPort: 30004
         hostPort: 30004
         protocol: TCP
-      - containerPort: 30005   # Causa MCP
+      - containerPort: 30005
         hostPort: 30005
         protocol: TCP
 EOF
     echo "${config_file}"
 }
 
-# ---------------------------------------------------------------------------
-# _connect_registry_to_kind_network
-# Attaches the registry container to the Kind Docker network so nodes
-# can resolve its hostname.
-# ---------------------------------------------------------------------------
+# _connect_registry_to_kind_network — attaches the registry to the Kind network
 _connect_registry_to_kind_network() {
     local runtime="${CONTAINER_RUNTIME:-docker}"
     if ${runtime} network inspect kind &>/dev/null; then
@@ -134,11 +136,22 @@ _connect_registry_to_kind_network() {
     fi
 }
 
-# ---------------------------------------------------------------------------
-# _apply_registry_configmap
-# Tells Kind nodes about the local registry via the standard ConfigMap
-# (https://kind.sigs.k8s.io/docs/user/local-registry/)
-# ---------------------------------------------------------------------------
+# _write_registry_hosts_toml — writes the containerd v2 registry mirror config into each node
+_write_registry_hosts_toml() {
+    local runtime="${CONTAINER_RUNTIME:-docker}"
+    local hosts_dir="/etc/containerd/certs.d/localhost:${KIND_REGISTRY_PORT}"
+    local hosts_toml
+    hosts_toml=$(printf '[host."http://%s:5000"]\n  capabilities = ["pull", "resolve"]\n' "${KIND_REGISTRY_NAME}")
+
+    for node in $(kind get nodes --name "${KIND_CLUSTER_NAME}" 2>/dev/null); do
+        ${runtime} exec "${node}" mkdir -p "${hosts_dir}" >>"${LOG_FILE}" 2>&1
+        ${runtime} exec "${node}" sh -c \
+            "printf '%s\n' '${hosts_toml}' > ${hosts_dir}/hosts.toml" >>"${LOG_FILE}" 2>&1
+        write_to_log_file "INFO" "Registry mirror hosts.toml written to node '${node}'"
+    done
+}
+
+# _apply_registry_configmap — applies the standard local-registry-hosting ConfigMap
 _apply_registry_configmap() {
     ${KUBE_CLI} apply -f - >>"${LOG_FILE}" 2>&1 << EOF
 apiVersion: v1
@@ -154,10 +167,7 @@ EOF
     write_to_log_file "SUCCESS" "Local registry ConfigMap applied"
 }
 
-# ---------------------------------------------------------------------------
-# install_kind_cluster
-# Main entry point: start registry → create cluster → wire registry
-# ---------------------------------------------------------------------------
+# install_kind_cluster — start registry → create cluster → wire registry
 install_kind_cluster() {
     log_section_silent "Provisioning Kind Cluster"
 
@@ -166,19 +176,16 @@ install_kind_cluster() {
         return 0
     fi
 
-    # 1. Ensure container runtime is running
     local runtime="${CONTAINER_RUNTIME:-docker}"
     if ! ${runtime} info &>/dev/null; then
         log_error "${runtime} is not running. Start it and retry."
         return 1
     fi
 
-    # 2. Start local registry (idempotent)
     if ! _start_local_registry; then
         return 1
     fi
 
-    # 3. Create cluster if it doesn't exist
     if _kind_cluster_exists; then
         write_to_log_file "INFO" "Kind cluster '${KIND_CLUSTER_NAME}' already exists — skipping creation"
     else
@@ -186,10 +193,6 @@ install_kind_cluster() {
         kind_config=$(_write_kind_config)
         write_to_log_file "INFO" "Creating Kind cluster '${KIND_CLUSTER_NAME}'..."
 
-        # Force Kind to use the same container runtime the installer detected.
-        # Without this, Kind on a machine that has both Docker and Podman installed
-        # may silently pick Podman even when Docker was detected — causing kubelet
-        # cgroup failures under the Podman provider on macOS.
         if ! KIND_EXPERIMENTAL_PROVIDER="${CONTAINER_RUNTIME}" \
                 kind create cluster --config "${kind_config}" >>"${LOG_FILE}" 2>&1; then
             log_error "Failed to create Kind cluster '${KIND_CLUSTER_NAME}'"
@@ -200,12 +203,11 @@ install_kind_cluster() {
         write_to_log_file "SUCCESS" "Kind cluster '${KIND_CLUSTER_NAME}' created"
     fi
 
-    # 4. Switch kubectl context to this cluster
     ${KUBE_CLI} config use-context "kind-${KIND_CLUSTER_NAME}" >>"${LOG_FILE}" 2>&1 || true
     write_to_log_file "INFO" "kubectl context set to kind-${KIND_CLUSTER_NAME}"
 
-    # 5. Wire registry to Kind network and apply ConfigMap
     _connect_registry_to_kind_network
+    _write_registry_hosts_toml
     _apply_registry_configmap
 
     write_to_log_file "SUCCESS" "Kind cluster '${KIND_CLUSTER_NAME}' is ready"
@@ -214,10 +216,7 @@ install_kind_cluster() {
     return 0
 }
 
-# ---------------------------------------------------------------------------
-# uninstall_kind_cluster
-# Deletes the cluster and stops/removes the registry container.
-# ---------------------------------------------------------------------------
+# uninstall_kind_cluster — deletes the cluster and removes the registry container
 uninstall_kind_cluster() {
     log_section_silent "Removing Kind Cluster"
 
@@ -245,8 +244,5 @@ uninstall_kind_cluster() {
     return 0
 }
 
-# ---------------------------------------------------------------------------
-# Export
-# ---------------------------------------------------------------------------
 export -f install_kind_cluster
 export -f uninstall_kind_cluster

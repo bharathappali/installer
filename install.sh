@@ -19,47 +19,32 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export SCRIPT_DIR
 
-# ---------------------------------------------------------------------------
-# Source images.env FIRST — defines image defaults; can be overridden by
-# CLI flags or exported env vars (priority: CLI > export > images.env)
-# ---------------------------------------------------------------------------
 IMAGES_ENV_FILE="${SCRIPT_DIR}/lib/images.env"
 if [[ -f "${IMAGES_ENV_FILE}" ]]; then
     # shellcheck source=lib/images.env
     source "${IMAGES_ENV_FILE}"
 fi
 
-# ---------------------------------------------------------------------------
-# Global configuration defaults
-# ---------------------------------------------------------------------------
 MANIFESTS_DIR="${SCRIPT_DIR}/manifests"
 
-# Namespace where all RCA components are deployed
 INSTALL_NAMESPACE="${INSTALL_NAMESPACE:-causa-rca}"
 export INSTALL_NAMESPACE
 
-# Cluster CLI
 KUBE_CLI="${KUBE_CLI:-kubectl}"
 export KUBE_CLI
 
-# Target platform — determines which infrastructure steps run.
-# Supported values: kind
-# kind  → creates a Kind cluster + local registry
 INSTALL_TARGET="${INSTALL_TARGET:-kind}"
 export INSTALL_TARGET
 
-# Behaviour flags
 DRY_RUN="${DRY_RUN:-false}"
 TERMINATE="${TERMINATE:-false}"
 export DRY_RUN TERMINATE
 
-# Kind cluster settings (consumed by lib/install_kind_cluster.sh)
 KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-causa-rca}"
 KIND_REGISTRY_NAME="${KIND_REGISTRY_NAME:-causa-rca-registry}"
 KIND_REGISTRY_PORT="${KIND_REGISTRY_PORT:-5001}"
 export KIND_CLUSTER_NAME KIND_REGISTRY_NAME KIND_REGISTRY_PORT
 
-# Image variables (populated by images.env; can be overridden via CLI flags)
 K8S_MCP_SERVER_IMAGE="${K8S_MCP_SERVER_IMAGE:-}"
 CAUSA_BACKEND_IMAGE="${CAUSA_BACKEND_IMAGE:-}"
 QUARKUS_MCP_IMAGE="${QUARKUS_MCP_IMAGE:-}"
@@ -67,7 +52,6 @@ CAUSA_MCP_IMAGE="${CAUSA_MCP_IMAGE:-}"
 export K8S_MCP_SERVER_IMAGE CAUSA_BACKEND_IMAGE
 export QUARKUS_MCP_IMAGE CAUSA_MCP_IMAGE
 
-# Sentinel flags — set to "true" only when a CLI flag explicitly overrides an image
 K8S_MCP_SERVER_IMAGE_OVERRIDDEN=false
 CAUSA_BACKEND_IMAGE_OVERRIDDEN=false
 QUARKUS_MCP_IMAGE_OVERRIDDEN=false
@@ -75,23 +59,14 @@ CAUSA_MCP_IMAGE_OVERRIDDEN=false
 export K8S_MCP_SERVER_IMAGE_OVERRIDDEN CAUSA_BACKEND_IMAGE_OVERRIDDEN
 export QUARKUS_MCP_IMAGE_OVERRIDDEN CAUSA_MCP_IMAGE_OVERRIDDEN
 
-# ---------------------------------------------------------------------------
-# Source library files
-# ---------------------------------------------------------------------------
 source "${SCRIPT_DIR}/lib/logging.sh"
 source "${SCRIPT_DIR}/lib/install_utils.sh"
 source "${SCRIPT_DIR}/lib/validator.sh"
 source "${SCRIPT_DIR}/lib/install_kind_cluster.sh"
 
-# ---------------------------------------------------------------------------
-# Activate opt-in traps (scoped here, not in shared libraries)
-# ---------------------------------------------------------------------------
-enable_cleanup_trap   # lib/install_utils.sh — log error on unexpected EXIT
-enable_spinner_trap   # lib/logging.sh       — stop spinner cleanly on INT/TERM
+enable_cleanup_trap
+enable_spinner_trap
 
-# ---------------------------------------------------------------------------
-# Logging initialisation
-# ---------------------------------------------------------------------------
 initialize_logging() {
     LOG_FILE="${SCRIPT_DIR}/install.log"
     if [[ "${TERMINATE:-false}" == "true" ]]; then
@@ -108,16 +83,10 @@ initialize_logging() {
     fi
 }
 
-################################################################################
-# _is_kind_target — returns 0 when the install target is kind
-################################################################################
 _is_kind_target() {
     [[ "${INSTALL_TARGET}" == "kind" ]]
 }
 
-################################################################################
-# main — install
-################################################################################
 main() {
     local start_time; start_time=$(date +%s)
 
@@ -130,7 +99,6 @@ main() {
         write_to_log_file "INFO" "Registry:       localhost:${KIND_REGISTRY_PORT}"
     fi
 
-    # ── Pre-flight checks ────────────────────────────────────────────────────
     log_section "Pre-installation Validation"
 
     if ! validate_prerequisites; then
@@ -150,7 +118,6 @@ main() {
         exit 1
     fi
 
-    # ── Step 1: Kind cluster + local registry (kind target only) ────────────
     if _is_kind_target; then
         start_spinner "Provisioning Kind cluster and local registry..."
         if ! install_kind_cluster; then
@@ -162,8 +129,6 @@ main() {
         log_install_success "Kind Cluster (${KIND_CLUSTER_NAME})"
     fi
 
-    # After cluster is ready, validate connectivity
-    # Skip for dry-run on kind target — the cluster doesn't exist yet
     if [[ "${DRY_RUN}" != "true" ]] || ! _is_kind_target; then
         if ! validate_cluster_access; then
             log_error "Cluster access check failed"
@@ -171,11 +136,9 @@ main() {
         fi
     fi
 
-    # ── Track installed components ───────────────────────────────────────────
     local installed_components=()
     installed_components+=("Kind Cluster (${KIND_CLUSTER_NAME})")
 
-    # ── Post-install summary ─────────────────────────────────────────────────
     {
         echo ""
         echo -e "${COLOR_CYAN}${COLOR_BOLD}========================================${COLOR_RESET}"
@@ -195,15 +158,11 @@ main() {
     fi
 }
 
-################################################################################
-# uninstall_main — teardown
-################################################################################
 uninstall_main() {
     local start_time; start_time=$(date +%s)
 
     log_file_only "Starting Causa RCA uninstallation..."
 
-    # Optionally delete the Kind cluster entirely
     if _is_kind_target; then
         if [[ "${DELETE_CLUSTER:-false}" == "true" ]]; then
             start_spinner "Deleting Kind cluster ${KIND_CLUSTER_NAME}..."
@@ -230,9 +189,6 @@ uninstall_main() {
     exit 0
 }
 
-################################################################################
-# show_usage
-################################################################################
 show_usage() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
@@ -287,9 +243,6 @@ show_usage() {
     echo ""
 }
 
-################################################################################
-# parse_arguments
-################################################################################
 parse_arguments() {
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -337,9 +290,6 @@ parse_arguments() {
     done
 }
 
-################################################################################
-# Entry point
-################################################################################
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     initialize_logging
     parse_arguments "$@"
