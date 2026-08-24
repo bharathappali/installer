@@ -81,6 +81,39 @@ _start_local_registry() {
     return 0
 }
 
+# _check_ports_available — fails with a clear message if any required host port is in use
+_check_ports_available() {
+    local ports=(30000 30001 30004 30005 "${KIND_REGISTRY_PORT}")
+    local blocked=()
+
+    for port in "${ports[@]}"; do
+        if lsof -iTCP:"${port}" -sTCP:LISTEN &>/dev/null 2>&1; then
+            local owner
+            owner=$(lsof -iTCP:"${port}" -sTCP:LISTEN -n -P 2>/dev/null \
+                        | awk 'NR==2{print $1" (pid "$2")"}')
+            blocked+=("${port} — in use by ${owner:-unknown process}")
+            write_to_log_file "ERROR" "Port ${port} already in use: ${owner:-unknown}"
+        fi
+    done
+
+    if [[ ${#blocked[@]} -gt 0 ]]; then
+        log_error "Required ports are already in use:"
+        for entry in "${blocked[@]}"; do
+            log_error "  port ${entry}"
+        done
+        log_error "This usually means a previous Kind cluster was deleted but its port"
+        log_error "mappings are still held by the Podman/Docker network proxy (gvproxy)."
+        log_error "Fix options:"
+        log_error "  1. Restart the container runtime:"
+        log_error "       podman machine stop && podman machine start"
+        log_error "     or restart Docker Desktop"
+        log_error "  2. Or reuse the existing cluster by re-running ./install.sh"
+        log_error "     (the installer is idempotent if the cluster already exists)"
+        return 1
+    fi
+    return 0
+}
+
 # _write_kind_config — writes cluster config YAML to a temp file and prints the path
 _write_kind_config() {
     local config_file; config_file=$(mktemp /tmp/kind-config-XXXXXX.yaml)
@@ -189,6 +222,10 @@ install_kind_cluster() {
     if _kind_cluster_exists; then
         write_to_log_file "INFO" "Kind cluster '${KIND_CLUSTER_NAME}' already exists — skipping creation"
     else
+        if ! _check_ports_available; then
+            return 1
+        fi
+
         local kind_config
         kind_config=$(_write_kind_config)
         write_to_log_file "INFO" "Creating Kind cluster '${KIND_CLUSTER_NAME}'..."
