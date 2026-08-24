@@ -81,9 +81,11 @@ _start_local_registry() {
     return 0
 }
 
-# _check_ports_available — fails with a clear message if any required host port is in use
+# _check_ports_available — fails with a clear message if any required host port is in use.
+# Only checks the Kind node ports (30000-30005). Registry port is excluded because
+# _start_local_registry runs first and manages port ${KIND_REGISTRY_PORT} idempotently.
 _check_ports_available() {
-    local ports=(30000 30001 30004 30005 "${KIND_REGISTRY_PORT}")
+    local ports=(30000 30001 30004 30005)
     local blocked=()
 
     for port in "${ports[@]}"; do
@@ -262,6 +264,8 @@ uninstall_kind_cluster() {
         return 0
     fi
 
+    local runtime="${CONTAINER_RUNTIME:-docker}"
+
     if _kind_cluster_exists; then
         write_to_log_file "INFO" "Deleting Kind cluster '${KIND_CLUSTER_NAME}'..."
         kind delete cluster --name "${KIND_CLUSTER_NAME}" >>"${LOG_FILE}" 2>&1
@@ -270,11 +274,23 @@ uninstall_kind_cluster() {
         write_to_log_file "INFO" "Kind cluster '${KIND_CLUSTER_NAME}' not found — nothing to delete"
     fi
 
-    local runtime="${CONTAINER_RUNTIME:-docker}"
-    if _kind_registry_running; then
+    # kind delete cluster stops the control-plane container but does not remove it.
+    # On Podman/macOS, gvproxy re-acquires the port bindings of any Exited container,
+    # so a subsequent install attempt fails with "port already in use".
+    # Explicitly remove any leftover Kind node containers for this cluster.
+    local node_containers
+    node_containers=$(${runtime} ps -a --format '{{.Names}}' 2>/dev/null \
+        | grep "^${KIND_CLUSTER_NAME}-" || true)
+    if [[ -n "${node_containers}" ]]; then
+        write_to_log_file "INFO" "Removing leftover Kind node containers to free host ports..."
+        echo "${node_containers}" | xargs ${runtime} rm -f >>"${LOG_FILE}" 2>&1 || true
+        write_to_log_file "SUCCESS" "Kind node containers removed"
+    fi
+
+    if _kind_registry_exists; then
         write_to_log_file "INFO" "Stopping and removing local registry '${KIND_REGISTRY_NAME}'..."
         ${runtime} stop "${KIND_REGISTRY_NAME}" >>"${LOG_FILE}" 2>&1 || true
-        ${runtime} rm   "${KIND_REGISTRY_NAME}" >>"${LOG_FILE}" 2>&1 || true
+        ${runtime} rm -f "${KIND_REGISTRY_NAME}" >>"${LOG_FILE}" 2>&1 || true
         write_to_log_file "SUCCESS" "Local registry removed"
     fi
 
