@@ -11,8 +11,6 @@ Deploys the full Causa RCA infrastructure stack onto a local [Kind](https://kind
 | Prometheus Stack (kube-prometheus-stack) | — |
 | Kubernetes MCP Server | 30000 |
 | Causa Backend | 30001 |
-| Async Profiler | 30002 |
-| Async Profiler MCP Server | 30003 |
 | Quarkus MCP Server | 30004 |
 | Causa MCP Server | 30005 |
 
@@ -53,8 +51,6 @@ lib/                # One install script per component
 manifests/          # Kubernetes resource definitions
   prometheus/       # Alert rules
   causa/            # Causa Backend
-  async_profiler/   # Async Profiler
-  async_profiler_mcp/  # Async Profiler MCP Server
   quarkus_mcp/      # Quarkus MCP Server
   causa_mcp/        # Causa MCP Server
 ```
