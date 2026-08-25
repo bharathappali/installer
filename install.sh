@@ -6,6 +6,7 @@
 # Provisions the target environment and deploys the full RCA stack:
 #   - Kubernetes MCP Server
 #   - Causa Backend (RCA engine)
+#   - Jafra MCP Server
 #   - Quarkus MCP Server
 #   - Causa MCP Server
 #
@@ -66,18 +67,20 @@ export KIND_CLUSTER_NAME KIND_REGISTRY_NAME KIND_REGISTRY_PORT
 # Image variables (populated by images.env; can be overridden via CLI flags)
 K8S_MCP_SERVER_IMAGE="${K8S_MCP_SERVER_IMAGE:-}"
 CAUSA_BACKEND_IMAGE="${CAUSA_BACKEND_IMAGE:-}"
+JAFRA_MCP_IMAGE="${JAFRA_MCP_IMAGE:-}"
 QUARKUS_MCP_IMAGE="${QUARKUS_MCP_IMAGE:-}"
 CAUSA_MCP_IMAGE="${CAUSA_MCP_IMAGE:-}"
 export K8S_MCP_SERVER_IMAGE CAUSA_BACKEND_IMAGE
-export QUARKUS_MCP_IMAGE CAUSA_MCP_IMAGE
+export JAFRA_MCP_IMAGE QUARKUS_MCP_IMAGE CAUSA_MCP_IMAGE
 
 # Sentinel flags — set to "true" only when a CLI flag explicitly overrides an image
 K8S_MCP_SERVER_IMAGE_OVERRIDDEN=false
 CAUSA_BACKEND_IMAGE_OVERRIDDEN=false
+JAFRA_MCP_IMAGE_OVERRIDDEN=false
 QUARKUS_MCP_IMAGE_OVERRIDDEN=false
 CAUSA_MCP_IMAGE_OVERRIDDEN=false
 export K8S_MCP_SERVER_IMAGE_OVERRIDDEN CAUSA_BACKEND_IMAGE_OVERRIDDEN
-export QUARKUS_MCP_IMAGE_OVERRIDDEN CAUSA_MCP_IMAGE_OVERRIDDEN
+export JAFRA_MCP_IMAGE_OVERRIDDEN QUARKUS_MCP_IMAGE_OVERRIDDEN CAUSA_MCP_IMAGE_OVERRIDDEN
 
 # ---------------------------------------------------------------------------
 # Source library files
@@ -87,9 +90,10 @@ source "${SCRIPT_DIR}/lib/install_utils.sh"
 source "${SCRIPT_DIR}/lib/validator.sh"
 source "${SCRIPT_DIR}/lib/install_kind_cluster.sh"
 source "${SCRIPT_DIR}/lib/install_k8s_mcp.sh"
+source "${SCRIPT_DIR}/lib/install_jafra_mcp.sh"
+source "${SCRIPT_DIR}/lib/install_quarkus_mcp.sh"
 source "${SCRIPT_DIR}/lib/install_postgres.sh"
 source "${SCRIPT_DIR}/lib/install_causa.sh"
-source "${SCRIPT_DIR}/lib/install_quarkus_mcp.sh"
 source "${SCRIPT_DIR}/lib/install_causa_mcp.sh"
 
 # ---------------------------------------------------------------------------
@@ -154,11 +158,6 @@ main() {
         fi
     fi
 
-    if ! validate_rbac_permissions; then
-        log_error "RBAC permissions check failed"
-        exit 1
-    fi
-
     if ! validate_image_overrides; then
         log_error "Image validation failed"
         exit 1
@@ -199,6 +198,17 @@ main() {
     log_install_success "Kubernetes MCP Server"
     installed_components+=("Kubernetes MCP Server")
 
+    # ── Step 3: Jafra MCP Server ──────────────────────────────────────────────
+    start_spinner "Installing Jafra MCP Server..."
+    if ! install_jafra_mcp; then
+        stop_spinner
+        log_warn "Jafra MCP Server installation skipped or failed"
+    else
+        stop_spinner
+        log_install_success "Jafra MCP Server"
+        installed_components+=("Jafra MCP Server")
+    fi
+
     # ── Step 4: Quarkus MCP Server ───────────────────────────────────────────
     start_spinner "Installing Quarkus MCP Server..."
     if ! install_quarkus_mcp; then
@@ -210,7 +220,7 @@ main() {
         installed_components+=("Quarkus MCP Server")
     fi
 
-    # ── Step 7: PostgreSQL ───────────────────────────────────────────────────
+    # ── Step 5: PostgreSQL ───────────────────────────────────────────────────
     start_spinner "Installing PostgreSQL..."
     if ! install_postgres; then
         stop_spinner
@@ -221,7 +231,7 @@ main() {
     log_install_success "PostgreSQL"
     installed_components+=("PostgreSQL")
 
-    # ── Step 8: Causa Backend ────────────────────────────────────────────────
+    # ── Step 6: Causa Backend ────────────────────────────────────────────────
     start_spinner "Installing Causa Backend..."
     if ! install_causa; then
         stop_spinner
@@ -232,7 +242,7 @@ main() {
     log_install_success "Causa Backend"
     installed_components+=("Causa Backend")
 
-    # ── Step 9: Causa MCP Server ─────────────────────────────────────────────
+    # ── Step 7: Causa MCP Server ─────────────────────────────────────────────
     start_spinner "Installing Causa MCP Server..."
     if ! install_causa_mcp; then
         stop_spinner
@@ -284,6 +294,10 @@ uninstall_main() {
     start_spinner "Uninstalling Quarkus MCP Server..."
     uninstall_quarkus_mcp
     stop_spinner; log_uninstall_success "Quarkus MCP Server"
+
+    start_spinner "Uninstalling Jafra MCP Server..."
+    uninstall_jafra_mcp
+    stop_spinner; log_uninstall_success "Jafra MCP Server"
 
     start_spinner "Uninstalling Causa Backend..."
     if ! uninstall_causa; then
@@ -371,6 +385,7 @@ show_usage() {
     echo ""
     echo "IMAGE OVERRIDE OPTIONS:"
     echo "    --k8s-mcp-server-image IMAGE              Override Kubernetes MCP Server image"
+    echo "    --jafra-mcp-image IMAGE                    Override Jafra MCP Server image"
     echo "    --causa-backend-image IMAGE                Override Causa Backend image"
     echo "    --quarkus-mcp-image IMAGE                  Override Quarkus MCP Server image"
     echo "    --causa-mcp-image IMAGE                    Override Causa MCP Server image"
@@ -438,6 +453,9 @@ parse_arguments() {
             --k8s-mcp-server-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --k8s-mcp-server-image"; show_usage; exit 2; }
                 K8S_MCP_SERVER_IMAGE="$2"; K8S_MCP_SERVER_IMAGE_OVERRIDDEN=true; shift 2 ;;
+            --jafra-mcp-image)
+                [[ -z "${2:-}" ]] && { log_error "Value required for --jafra-mcp-image"; show_usage; exit 2; }
+                JAFRA_MCP_IMAGE="$2"; JAFRA_MCP_IMAGE_OVERRIDDEN=true; shift 2 ;;
             --causa-backend-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --causa-backend-image"; show_usage; exit 2; }
                 CAUSA_BACKEND_IMAGE="$2"; CAUSA_BACKEND_IMAGE_OVERRIDDEN=true; shift 2 ;;

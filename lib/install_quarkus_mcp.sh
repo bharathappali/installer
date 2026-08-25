@@ -9,7 +9,7 @@ if [[ -n "${INSTALL_QUARKUS_MCP_LIB_LOADED:-}" ]]; then return 0; fi
 readonly INSTALL_QUARKUS_MCP_LIB_LOADED=1
 
 _quarkus_mcp_not_released() {
-    [[ "${QUARKUS_MCP_IMAGE}" == "quay.io/causaai/quarkus-mcp:latest" ]]
+    [[ -z "${QUARKUS_MCP_IMAGE:-}" ]]
 }
 
 ################################################################################
@@ -41,7 +41,7 @@ install_quarkus_mcp() {
         return 1
     fi
 
-    if ! wait_for_deployment "quarkus-mcp" "${INSTALL_NAMESPACE}" 300; then
+    if ! wait_for_deployment "mcp-metrics" "${INSTALL_NAMESPACE}" 300; then
         log_error "Quarkus MCP did not become ready"
         return 1
     fi

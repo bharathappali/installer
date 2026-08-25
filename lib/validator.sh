@@ -3,7 +3,7 @@
 ################################################################################
 # Validator Library — Causa RCA Installer
 #
-# Pre-flight checks: required CLI tools, Docker, cluster access, RBAC.
+# Pre-flight checks: required CLI tools, Docker, cluster access.
 ################################################################################
 
 # Prevent multiple sourcing
@@ -220,6 +220,7 @@ validate_image_overrides() {
     }
 
     _vi "${K8S_MCP_SERVER_IMAGE}"          "--k8s-mcp-server-image"       "${K8S_MCP_SERVER_IMAGE_OVERRIDDEN:-false}"
+    _vi "${JAFRA_MCP_IMAGE}"               "--jafra-mcp-image"            "${JAFRA_MCP_IMAGE_OVERRIDDEN:-false}"
     _vi "${CAUSA_BACKEND_IMAGE}"           "--causa-backend-image"        "${CAUSA_BACKEND_IMAGE_OVERRIDDEN:-false}"
     _vi "${QUARKUS_MCP_IMAGE}"             "--quarkus-mcp-image"          "${QUARKUS_MCP_IMAGE_OVERRIDDEN:-false}"
     _vi "${CAUSA_MCP_IMAGE}"               "--causa-mcp-image"            "${CAUSA_MCP_IMAGE_OVERRIDDEN:-false}"
@@ -268,20 +269,24 @@ post_component_validation() {
         fi
     }
 
-    local k8s_mcp_status causa_status quarkus_status causa_mcp_status
+    local k8s_mcp_status jafra_mcp_status quarkus_status postgres_status causa_status causa_mcp_status
 
-    _check_deployment "Kubernetes MCP Server"    "kubernetes-mcp-server"  k8s_mcp_status
-    _check_deployment "Causa Backend"            "causa-backend"          causa_status
-    _check_deployment "Quarkus MCP Server"       "mcp-metrics"            quarkus_status
-    _check_deployment "Causa MCP Server"         "causa-mcp"              causa_mcp_status
+    _check_deployment "Kubernetes MCP Server"  "kubernetes-mcp-server"  k8s_mcp_status
+    _check_deployment "Jafra MCP Server"       "jafra-mcp"              jafra_mcp_status
+    _check_deployment "Quarkus MCP Server"         "mcp-metrics"            quarkus_status
+    _check_deployment "PostgreSQL"                 "postgres"               postgres_status
+    _check_deployment "Causa Backend"              "causa-backend"          causa_status
+    _check_deployment "Causa MCP Server"           "causa-mcp"              causa_mcp_status
 
     {
         echo ""
         echo -e "${COLOR_CYAN}${COLOR_BOLD}Component Health Summary${COLOR_RESET}"
         echo ""
         echo -e "${k8s_mcp_status}"
-        echo -e "${causa_status}"
+        echo -e "${jafra_mcp_status}"
         echo -e "${quarkus_status}"
+        echo -e "${postgres_status}"
+        echo -e "${causa_status}"
         echo -e "${causa_mcp_status}"
         echo ""
         [[ -n "${elapsed_label}" ]] && echo -e "${COLOR_BOLD_YELLOW}Total installation time: ${elapsed_label}${COLOR_RESET}" && echo ""
