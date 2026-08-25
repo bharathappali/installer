@@ -121,6 +121,8 @@ main() {
         exit 1
     fi
 
+    local installed_components=()
+
     if _is_kind_target; then
         start_spinner "Provisioning Kind cluster and local registry..."
         if ! install_kind_cluster; then
@@ -130,6 +132,7 @@ main() {
         fi
         stop_spinner
         log_install_success "Kind Cluster (${KIND_CLUSTER_NAME})"
+        installed_components+=("Kind Cluster (${KIND_CLUSTER_NAME})")
     fi
 
     if [[ "${DRY_RUN}" != "true" ]] || ! _is_kind_target; then
@@ -138,9 +141,6 @@ main() {
             exit 1
         fi
     fi
-
-    local installed_components=()
-    installed_components+=("Kind Cluster (${KIND_CLUSTER_NAME})")
 
     start_spinner "Installing Kubernetes MCP Server..."
     if ! install_kubernetes_mcp_server; then

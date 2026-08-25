@@ -29,11 +29,6 @@ install_causa() {
 
     write_to_log_file "INFO" "Using image: ${img}"
 
-    # Delete any existing deployment so stale replicasets don't accumulate
-    # and new pods always get the latest secret bindings
-    ${KUBE_CLI} delete deployment causa-backend -n "${INSTALL_NAMESPACE}" \
-        --ignore-not-found=true >>"${LOG_FILE}" 2>&1 || true
-
     if ! apply_manifest "${manifest}" "${INSTALL_NAMESPACE}" \
         "image: .*causa-backend.*" "${img}"; then
         log_error "Failed to apply Causa Backend manifest"

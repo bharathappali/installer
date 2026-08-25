@@ -3,8 +3,7 @@
 ################################################################################
 # Kubernetes MCP Server — Installation Functions
 #
-# Kind target:       NodePort service (manifests/k8s_mcp_server.yaml)
-# OpenShift target:  ClusterIP + Route (manifests/openshift/k8s_mcp_server.yaml)
+# Deploys the Kubernetes MCP Server from manifests/k8s_mcp_server.yaml.
 ################################################################################
 
 # Source guard
@@ -21,13 +20,9 @@ DRY_RUN="${DRY_RUN:-false}"
 K8S_MCP_SERVER_IMAGE="${K8S_MCP_SERVER_IMAGE:-}"
 export SCRIPT_DIR INSTALL_NAMESPACE KUBE_CLI DRY_RUN K8S_MCP_SERVER_IMAGE
 
-# _k8s_mcp_manifest — returns the correct manifest path for the active target
+# _k8s_mcp_manifest — returns the manifest path
 _k8s_mcp_manifest() {
-    if [[ "${INSTALL_TARGET:-kind}" == "openshift" ]]; then
-        echo "${SCRIPT_DIR}/manifests/openshift/k8s_mcp_server.yaml"
-    else
-        echo "${SCRIPT_DIR}/manifests/k8s_mcp_server.yaml"
-    fi
+    echo "${SCRIPT_DIR}/manifests/k8s_mcp_server.yaml"
 }
 
 ################################################################################
@@ -62,17 +57,7 @@ install_kubernetes_mcp_server() {
 
     write_to_log_file "SUCCESS" "Kubernetes MCP Server installed"
 
-    if [[ "${INSTALL_TARGET:-kind}" == "openshift" ]]; then
-        local route_url
-        route_url=$(${KUBE_CLI} get route kubernetes-mcp-server \
-            -n "${INSTALL_NAMESPACE}" \
-            -o jsonpath='{.spec.host}' 2>/dev/null || echo "")
-        if [[ -n "${route_url}" ]]; then
-            write_to_log_file "INFO" "Route: https://${route_url}/mcp"
-        fi
-    else
-        write_to_log_file "INFO" "NodePort: http://localhost:30000/mcp"
-    fi
+    write_to_log_file "INFO" "NodePort: http://localhost:30000/mcp"
 
     return 0
 }

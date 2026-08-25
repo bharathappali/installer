@@ -9,7 +9,7 @@
 # Database : iri-db
 # User     : causa_backend
 # Secret   : causa-db-secrets (keys: CAUSA_DB_USERNAME, CAUSA_DB_PASSWORD,
-#                                     CAUSA_DB_HOST, CAUSA_DB_PORT, CAUSA_DB_NAME)
+#                                     CAUSA_DB_URL)
 ################################################################################
 
 # Source guard
@@ -34,6 +34,19 @@ install_postgres() {
     fi
 
     if ! create_namespace; then return 1; fi
+
+    write_to_log_file "INFO" "Creating postgres-credentials secret..."
+    ${KUBE_CLI} delete secret postgres-credentials \
+        -n "${INSTALL_NAMESPACE}" --ignore-not-found=true >>"${LOG_FILE}" 2>&1 || true
+    if ! ${KUBE_CLI} create secret generic postgres-credentials \
+        -n "${INSTALL_NAMESPACE}" \
+        --from-literal=POSTGRES_DB="${_PG_DB_NAME}" \
+        --from-literal=POSTGRES_USER="${_PG_USER}" \
+        --from-literal=POSTGRES_PASSWORD="${_PG_PASS}" \
+        >>"${LOG_FILE}" 2>&1; then
+        log_error "Failed to create postgres-credentials secret"
+        return 1
+    fi
 
     write_to_log_file "INFO" "Applying Postgres manifest..."
     if ! apply_manifest "${_PG_MANIFEST}" "${INSTALL_NAMESPACE}" \
@@ -83,6 +96,8 @@ uninstall_postgres() {
     delete_manifest "${_PG_MANIFEST}" "${INSTALL_NAMESPACE}"
 
     ${KUBE_CLI} delete secret "${_PG_SECRET_NAME}" \
+        -n "${INSTALL_NAMESPACE}" --ignore-not-found=true >>"${LOG_FILE}" 2>&1 || true
+    ${KUBE_CLI} delete secret postgres-credentials \
         -n "${INSTALL_NAMESPACE}" --ignore-not-found=true >>"${LOG_FILE}" 2>&1 || true
 
     write_to_log_file "SUCCESS" "PostgreSQL uninstalled"
