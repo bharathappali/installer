@@ -20,6 +20,7 @@ Deploys the full Causa RCA infrastructure stack onto a local [Kind](https://kind
 - [`docker`](https://docs.docker.com/get-docker/) **or** [`podman`](https://podman.io/getting-started/installation) (rootful mode)
 - [`kind`](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
 - [`kubectl`](https://kubernetes.io/docs/tasks/tools/)
+- [`helm`](https://helm.sh/docs/intro/install/) — required for Prometheus (kube-prometheus-stack)
 - `curl`, `grep`, `sed`, `awk` — pre-installed on macOS and most Linux distributions
 
 > **Podman users:** the Podman machine must be started in rootful mode (`podman machine init --rootful`).

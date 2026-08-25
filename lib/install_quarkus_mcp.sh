@@ -28,6 +28,15 @@ install_quarkus_mcp() {
         return 0
     fi
 
+    # Quarkus MCP queries Prometheus for metrics.  On kind we must verify that
+    # Prometheus (kube-prometheus-stack) is running before deploying.
+    # On OpenShift and other managed platforms Prometheus is provided OOB so the
+    # check is skipped automatically inside validate_prometheus_available.
+    if ! validate_prometheus_available; then
+        log_error "Quarkus MCP Server requires Prometheus — see above for install instructions"
+        return 1
+    fi
+
     if ! create_namespace; then return 1; fi
 
     local manifest="${SCRIPT_DIR}/manifests/quarkus_mcp/deployment.yaml"

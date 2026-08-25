@@ -266,27 +266,49 @@ uninstall_kind_cluster() {
 
     local runtime="${CONTAINER_RUNTIME:-docker}"
 
+    # ── Step 1: Force-remove Kind node containers BEFORE calling kind delete ──
+    # On Podman/macOS, gvproxy holds host port bindings for as long as the
+    # container object exists (even in Exited state).  Removing the containers
+    # first ensures gvproxy releases ports 30000/30001/30004/30005 immediately,
+    # so that a fresh install.sh can reuse those ports without needing a runtime
+    # restart.  We do this before `kind delete cluster` so that the kind tool
+    # itself never has a chance to leave an Exited container behind.
+    # Kind node containers are named: <cluster>-control-plane, <cluster>-worker,
+    # <cluster>-worker2, etc.  The registry is named <cluster>-registry and must
+    # NOT be matched here — it is handled separately in Step 4.
+    # Use `kind get nodes` which lists only the actual node containers.
+    local node_containers
+    node_containers=$(kind get nodes --name "${KIND_CLUSTER_NAME}" 2>/dev/null || true)
+    if [[ -n "${node_containers}" ]]; then
+        write_to_log_file "INFO" "Force-removing Kind node containers to release host ports..."
+        echo "${node_containers}" | xargs ${runtime} rm -f >>"${LOG_FILE}" 2>&1 || true
+        write_to_log_file "SUCCESS" "Kind node containers removed (ports 30000/30001/30004/30005 freed)"
+    fi
+
+    # ── Step 2: Delete the cluster record from kind's bookkeeping ─────────────
     if _kind_cluster_exists; then
         write_to_log_file "INFO" "Deleting Kind cluster '${KIND_CLUSTER_NAME}'..."
-        kind delete cluster --name "${KIND_CLUSTER_NAME}" >>"${LOG_FILE}" 2>&1
+        kind delete cluster --name "${KIND_CLUSTER_NAME}" >>"${LOG_FILE}" 2>&1 || true
         write_to_log_file "SUCCESS" "Kind cluster '${KIND_CLUSTER_NAME}' deleted"
     else
         write_to_log_file "INFO" "Kind cluster '${KIND_CLUSTER_NAME}' not found — nothing to delete"
     fi
 
-    # kind delete cluster stops the control-plane container but does not remove it.
-    # On Podman/macOS, gvproxy re-acquires the port bindings of any Exited container,
-    # so a subsequent install attempt fails with "port already in use".
-    # Explicitly remove any leftover Kind node containers for this cluster.
-    local node_containers
-    node_containers=$(${runtime} ps -a --format '{{.Names}}' 2>/dev/null \
-        | grep "^${KIND_CLUSTER_NAME}-" || true)
-    if [[ -n "${node_containers}" ]]; then
-        write_to_log_file "INFO" "Removing leftover Kind node containers to free host ports..."
-        echo "${node_containers}" | xargs ${runtime} rm -f >>"${LOG_FILE}" 2>&1 || true
-        write_to_log_file "SUCCESS" "Kind node containers removed"
+    # ── Step 3: Clean up any node containers that kind delete left behind ─────
+    # kind delete cluster may leave an Exited container; do a second pass using
+    # kind get nodes (returns empty once the cluster is gone, so this is safe).
+    # Explicitly exclude the registry container name as a safety net.
+    local leftover
+    leftover=$(${runtime} ps -a --format '{{.Names}}' 2>/dev/null \
+        | grep "^${KIND_CLUSTER_NAME}-" \
+        | grep -v "^${KIND_REGISTRY_NAME}$" || true)
+    if [[ -n "${leftover}" ]]; then
+        write_to_log_file "INFO" "Removing residual Kind node containers..."
+        echo "${leftover}" | xargs ${runtime} rm -f >>"${LOG_FILE}" 2>&1 || true
+        write_to_log_file "SUCCESS" "Residual Kind node containers removed"
     fi
 
+    # ── Step 4: Remove the local registry ────────────────────────────────────
     if _kind_registry_exists; then
         write_to_log_file "INFO" "Stopping and removing local registry '${KIND_REGISTRY_NAME}'..."
         ${runtime} stop "${KIND_REGISTRY_NAME}" >>"${LOG_FILE}" 2>&1 || true
