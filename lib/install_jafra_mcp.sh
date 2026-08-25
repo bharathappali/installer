@@ -44,7 +44,7 @@ install_jafra_mcp() {
     write_to_log_file "INFO" "Manifest:    ${manifest}"
 
     if ! apply_manifest "${manifest}" "${INSTALL_NAMESPACE}" \
-        "image: .*khansaad.*" "${img}"; then
+         "image: .*jafra-mcp.*" "${img}"; then
         log_error "Failed to apply Jafra MCP Server manifest"
         return 1
     fi

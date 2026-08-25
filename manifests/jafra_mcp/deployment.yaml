@@ -22,7 +22,7 @@ spec:
       serviceAccountName: jafra-mcp
       containers:
         - name: jafra-mcp
-          image: quay.io/khansaad/async-profiler-mcp-server:0.1.0
+          image: quay.io/causa-ai-hub/jafra-mcp-server:0.1.0
           ports:
             - containerPort: 8083
               name: http
