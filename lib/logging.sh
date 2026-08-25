@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 ################################################################################
 # Logging Library
@@ -366,7 +366,7 @@ stop_spinner() {
     if [[ -n "${SPINNER_PID:-}" ]]; then
         kill "${SPINNER_PID}" 2>/dev/null || true
         wait "${SPINNER_PID}" 2>/dev/null || true
-        printf "\r\033[K" > /dev/tty 2>/dev/null
+        printf "\r\033[K" > /dev/tty 2>/dev/null || true
         SPINNER_PID=""
     fi
     return 0

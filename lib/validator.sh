@@ -83,6 +83,20 @@ validate_docker_running() {
         return 1
     fi
 
+    if [[ "${runtime}" == "podman" ]]; then
+        local rootful
+        rootful=$(podman machine inspect --format '{{.Rootful}}' 2>/dev/null || echo "")
+        if [[ "${rootful}" == "false" ]]; then
+            log_error "Podman machine is running in rootless mode — Kind requires rootful mode."
+            log_error "Recreate the Podman machine as rootful:"
+            log_error "  podman machine stop"
+            log_error "  podman machine rm"
+            log_error "  podman machine init --rootful --cpus 4 --memory 4096"
+            log_error "  podman machine start"
+            return 1
+        fi
+    fi
+
     write_to_log_file "SUCCESS" "Container runtime is running (${runtime})"
     log_validation_success "Validating container runtime"
     return 0
@@ -96,12 +110,9 @@ validate_docker_running() {
 validate_cluster_access() {
     log_file_only "Validating cluster access"
 
-    # Capture the current context so we can restore it afterwards.
     local prev_ctx
     prev_ctx=$(${KUBE_CLI} config current-context 2>/dev/null || echo "")
 
-    # For the kind target, the context is always kind-<cluster-name>.
-    # Switch to it explicitly so we never accidentally validate the wrong cluster.
     if [[ "${INSTALL_TARGET:-kind}" == "kind" ]]; then
         local kind_ctx="kind-${KIND_CLUSTER_NAME:-causa-rca}"
         if ${KUBE_CLI} config get-contexts "${kind_ctx}" &>/dev/null; then
@@ -125,8 +136,6 @@ validate_cluster_access() {
         rc=1
     fi
 
-    # Restore the previous context so the installer doesn't leave the user's
-    # kubeconfig pointing at the Kind cluster after validation.
     if [[ -n "${prev_ctx}" && "${prev_ctx}" != "${ctx}" ]]; then
         ${KUBE_CLI} config use-context "${prev_ctx}" >>"${LOG_FILE:-/dev/null}" 2>&1 || true
         write_to_log_file "INFO" "Restored kubectl context to ${prev_ctx}"
@@ -138,25 +147,6 @@ validate_cluster_access() {
 
     write_to_log_file "SUCCESS" "Cluster is reachable (context: ${ctx})"
     log_validation_success "Validating Cluster Access"
-    return 0
-}
-
-################################################################################
-# validate_rbac_permissions
-# Basic check — ensures the current user can create namespaces.
-################################################################################
-validate_rbac_permissions() {
-    log_file_only "Validating RBAC permissions"
-
-    # Kind clusters created by the user are typically cluster-admin — just
-    # do a lightweight can-i check rather than a full RBAC audit.
-    if ! ${KUBE_CLI} auth can-i create namespaces &>/dev/null; then
-        log_warn "Cannot verify 'create namespaces' permission — proceeding anyway (Kind clusters are typically admin)"
-    else
-        write_to_log_file "SUCCESS" "RBAC: create namespaces — allowed"
-    fi
-
-    log_validation_success "Validating RBAC Permissions"
     return 0
 }
 
@@ -220,8 +210,6 @@ validate_image_overrides() {
 
     _vi "${K8S_MCP_SERVER_IMAGE}"          "--k8s-mcp-server-image"       "${K8S_MCP_SERVER_IMAGE_OVERRIDDEN:-false}"
     _vi "${CAUSA_BACKEND_IMAGE}"           "--causa-backend-image"        "${CAUSA_BACKEND_IMAGE_OVERRIDDEN:-false}"
-    _vi "${ASYNC_PROFILER_IMAGE}"          "--async-profiler-image"       "${ASYNC_PROFILER_IMAGE_OVERRIDDEN:-false}"
-    _vi "${ASYNC_PROFILER_MCP_IMAGE}"      "--async-profiler-mcp-image"   "${ASYNC_PROFILER_MCP_IMAGE_OVERRIDDEN:-false}"
     _vi "${QUARKUS_MCP_IMAGE}"             "--quarkus-mcp-image"          "${QUARKUS_MCP_IMAGE_OVERRIDDEN:-false}"
     _vi "${CAUSA_MCP_IMAGE}"               "--causa-mcp-image"            "${CAUSA_MCP_IMAGE_OVERRIDDEN:-false}"
 
@@ -247,12 +235,6 @@ post_component_validation() {
 
     local failed=0
 
-    # ---------------------------------------------------------------------------
-    # _check_deployment <display-name> <deployment-name> <status-var-name>
-    # Sets the named variable to a green/red status string; increments failed if
-    # the deployment is absent or not fully ready. Skips (marks N/A) when the
-    # deployment does not exist, since some components are optional.
-    # ---------------------------------------------------------------------------
     _check_deployment() {
         local display="$1" deploy="$2" var="$3"
         local rr dr
@@ -270,18 +252,15 @@ post_component_validation() {
                 (( failed++ ))
             fi
         else
-            # Deployment not present — treat as not installed (N/A), not a failure
             printf -v "${var}" '%b' "${COLOR_YELLOW}${display} — not installed${COLOR_RESET}"
             write_to_log_file "INFO" "${display} deployment not found (skipped)"
         fi
     }
 
-    local k8s_mcp_status causa_status async_ctrl_status async_mcp_status quarkus_status causa_mcp_status
+    local k8s_mcp_status causa_status quarkus_status causa_mcp_status
 
     _check_deployment "Kubernetes MCP Server"    "kubernetes-mcp-server"  k8s_mcp_status
     _check_deployment "Causa Backend"            "causa-backend"          causa_status
-    _check_deployment "Async Profiler"           "async-profiler"         async_ctrl_status
-    _check_deployment "Async Profiler MCP"       "async-profiler-mcp"     async_mcp_status
     _check_deployment "Quarkus MCP Server"       "mcp-metrics"            quarkus_status
     _check_deployment "Causa MCP Server"         "causa-mcp"              causa_mcp_status
 
@@ -291,8 +270,6 @@ post_component_validation() {
         echo ""
         echo -e "${k8s_mcp_status}"
         echo -e "${causa_status}"
-        echo -e "${async_ctrl_status}"
-        echo -e "${async_mcp_status}"
         echo -e "${quarkus_status}"
         echo -e "${causa_mcp_status}"
         echo ""
@@ -308,13 +285,9 @@ post_component_validation() {
     fi
 }
 
-# ---------------------------------------------------------------------------
-# Export
-# ---------------------------------------------------------------------------
 export -f validate_prerequisites
 export -f validate_docker_running
 export -f validate_cluster_access
-export -f validate_rbac_permissions
 export -f validate_image_format_silent
 export -f validate_image_format
 export -f validate_image_overrides
