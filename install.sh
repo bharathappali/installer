@@ -6,8 +6,6 @@
 # Provisions the target environment and deploys the full RCA stack:
 #   - Kubernetes MCP Server
 #   - Causa Backend (RCA engine)
-#   - Async Profiler
-#   - Async Profiler MCP Server
 #   - Quarkus MCP Server
 #   - Causa MCP Server
 #
@@ -68,23 +66,17 @@ export KIND_CLUSTER_NAME KIND_REGISTRY_NAME KIND_REGISTRY_PORT
 # Image variables (populated by images.env; can be overridden via CLI flags)
 K8S_MCP_SERVER_IMAGE="${K8S_MCP_SERVER_IMAGE:-}"
 CAUSA_BACKEND_IMAGE="${CAUSA_BACKEND_IMAGE:-}"
-ASYNC_PROFILER_IMAGE="${ASYNC_PROFILER_IMAGE:-}"
-ASYNC_PROFILER_MCP_IMAGE="${ASYNC_PROFILER_MCP_IMAGE:-}"
 QUARKUS_MCP_IMAGE="${QUARKUS_MCP_IMAGE:-}"
 CAUSA_MCP_IMAGE="${CAUSA_MCP_IMAGE:-}"
 export K8S_MCP_SERVER_IMAGE CAUSA_BACKEND_IMAGE
-export ASYNC_PROFILER_IMAGE ASYNC_PROFILER_MCP_IMAGE
 export QUARKUS_MCP_IMAGE CAUSA_MCP_IMAGE
 
 # Sentinel flags — set to "true" only when a CLI flag explicitly overrides an image
 K8S_MCP_SERVER_IMAGE_OVERRIDDEN=false
 CAUSA_BACKEND_IMAGE_OVERRIDDEN=false
-ASYNC_PROFILER_IMAGE_OVERRIDDEN=false
-ASYNC_PROFILER_MCP_IMAGE_OVERRIDDEN=false
 QUARKUS_MCP_IMAGE_OVERRIDDEN=false
 CAUSA_MCP_IMAGE_OVERRIDDEN=false
 export K8S_MCP_SERVER_IMAGE_OVERRIDDEN CAUSA_BACKEND_IMAGE_OVERRIDDEN
-export ASYNC_PROFILER_IMAGE_OVERRIDDEN ASYNC_PROFILER_MCP_IMAGE_OVERRIDDEN
 export QUARKUS_MCP_IMAGE_OVERRIDDEN CAUSA_MCP_IMAGE_OVERRIDDEN
 
 # ---------------------------------------------------------------------------
@@ -97,8 +89,6 @@ source "${SCRIPT_DIR}/lib/install_kind_cluster.sh"
 source "${SCRIPT_DIR}/lib/install_k8s_mcp.sh"
 source "${SCRIPT_DIR}/lib/install_postgres.sh"
 source "${SCRIPT_DIR}/lib/install_causa.sh"
-source "${SCRIPT_DIR}/lib/install_async_profiler.sh"
-source "${SCRIPT_DIR}/lib/install_async_profiler_mcp.sh"
 source "${SCRIPT_DIR}/lib/install_quarkus_mcp.sh"
 source "${SCRIPT_DIR}/lib/install_causa_mcp.sh"
 
@@ -209,29 +199,7 @@ main() {
     log_install_success "Kubernetes MCP Server"
     installed_components+=("Kubernetes MCP Server")
 
-    # ── Step 4: Async Profiler ───────────────────────────────────────────────
-    start_spinner "Installing Async Profiler..."
-    if ! install_async_profiler; then
-        stop_spinner
-        log_warn "Async Profiler installation skipped or failed"
-    else
-        stop_spinner
-        log_install_success "Async Profiler"
-        installed_components+=("Async Profiler")
-    fi
-
-    # ── Step 5: Async Profiler MCP Server ────────────────────────────────────
-    start_spinner "Installing Async Profiler MCP Server..."
-    if ! install_async_profiler_mcp; then
-        stop_spinner
-        log_warn "Async Profiler MCP Server installation skipped or failed"
-    else
-        stop_spinner
-        log_install_success "Async Profiler MCP Server"
-        installed_components+=("Async Profiler MCP Server")
-    fi
-
-    # ── Step 6: Quarkus MCP Server ───────────────────────────────────────────
+    # ── Step 4: Quarkus MCP Server ───────────────────────────────────────────
     start_spinner "Installing Quarkus MCP Server..."
     if ! install_quarkus_mcp; then
         stop_spinner
@@ -316,14 +284,6 @@ uninstall_main() {
     start_spinner "Uninstalling Quarkus MCP Server..."
     uninstall_quarkus_mcp
     stop_spinner; log_uninstall_success "Quarkus MCP Server"
-
-    start_spinner "Uninstalling Async Profiler MCP Server..."
-    uninstall_async_profiler_mcp
-    stop_spinner; log_uninstall_success "Async Profiler MCP Server"
-
-    start_spinner "Uninstalling Async Profiler..."
-    uninstall_async_profiler
-    stop_spinner; log_uninstall_success "Async Profiler"
 
     start_spinner "Uninstalling Causa Backend..."
     if ! uninstall_causa; then
@@ -412,8 +372,6 @@ show_usage() {
     echo "IMAGE OVERRIDE OPTIONS:"
     echo "    --k8s-mcp-server-image IMAGE              Override Kubernetes MCP Server image"
     echo "    --causa-backend-image IMAGE                Override Causa Backend image"
-    echo "    --async-profiler-image IMAGE               Override Async Profiler image"
-    echo "    --async-profiler-mcp-image IMAGE           Override Async Profiler MCP Server image"
     echo "    --quarkus-mcp-image IMAGE                  Override Quarkus MCP Server image"
     echo "    --causa-mcp-image IMAGE                    Override Causa MCP Server image"
     echo ""
@@ -483,12 +441,6 @@ parse_arguments() {
             --causa-backend-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --causa-backend-image"; show_usage; exit 2; }
                 CAUSA_BACKEND_IMAGE="$2"; CAUSA_BACKEND_IMAGE_OVERRIDDEN=true; shift 2 ;;
-            --async-profiler-image)
-                [[ -z "${2:-}" ]] && { log_error "Value required for --async-profiler-image"; show_usage; exit 2; }
-                ASYNC_PROFILER_IMAGE="$2"; ASYNC_PROFILER_IMAGE_OVERRIDDEN=true; shift 2 ;;
-            --async-profiler-mcp-image)
-                [[ -z "${2:-}" ]] && { log_error "Value required for --async-profiler-mcp-image"; show_usage; exit 2; }
-                ASYNC_PROFILER_MCP_IMAGE="$2"; ASYNC_PROFILER_MCP_IMAGE_OVERRIDDEN=true; shift 2 ;;
             --quarkus-mcp-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --quarkus-mcp-image"; show_usage; exit 2; }
                 QUARKUS_MCP_IMAGE="$2"; QUARKUS_MCP_IMAGE_OVERRIDDEN=true; shift 2 ;;
