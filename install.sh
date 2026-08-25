@@ -164,6 +164,8 @@ main() {
     fi
 
     # ── Step 1: Kind cluster + local registry (kind target only) ────────────
+    local installed_components=()
+
     if _is_kind_target; then
         start_spinner "Provisioning Kind cluster and local registry..."
         if ! install_kind_cluster; then
@@ -173,6 +175,7 @@ main() {
         fi
         stop_spinner
         log_install_success "Kind Cluster (${KIND_CLUSTER_NAME})"
+        installed_components+=("Kind Cluster (${KIND_CLUSTER_NAME})")
     fi
 
     # After cluster is ready, validate connectivity
@@ -183,9 +186,6 @@ main() {
             exit 1
         fi
     fi
-
-    # ── Track installed components ───────────────────────────────────────────
-    local installed_components=()
 
     # ── Step 2: Kubernetes MCP Server ───────────────────────────────────────
     start_spinner "Installing Kubernetes MCP Server..."

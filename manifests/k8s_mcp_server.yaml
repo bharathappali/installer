@@ -96,7 +96,6 @@ metadata:
   labels:
     app: kubernetes-mcp-server
 spec:
-  # NodePort so Bob on localhost can reach it directly via localhost:30000
   type: NodePort
   ports:
     - port: 8080

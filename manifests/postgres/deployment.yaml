@@ -6,17 +6,6 @@
 # Database: iri-db  |  User: causa_backend
 # Credentials are written to the 'causa-db-secrets' Secret by the installer.
 apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-credentials
-  namespace: PLACEHOLDER_NAMESPACE
-type: Opaque
-stringData:
-  POSTGRES_DB: iri-db
-  POSTGRES_USER: causa_backend
-  POSTGRES_PASSWORD: causa_backend_pass
----
-apiVersion: v1
 kind: ConfigMap
 metadata:
   name: postgres-initdb
@@ -51,6 +40,7 @@ spec:
           envFrom:
             - secretRef:
                 name: postgres-credentials
+                # Secret created at install time by install_postgres() — not committed to source
           args:
             - -c
             - shared_preload_libraries=vector
@@ -74,10 +64,23 @@ spec:
               mountPath: /docker-entrypoint-initdb.d
       volumes:
         - name: postgres-data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: postgres-data
         - name: initdb
           configMap:
             name: postgres-initdb
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: PLACEHOLDER_NAMESPACE
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: v1
 kind: Service
