@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: causa-mcp
-          image: quay.io/bmenghan/causa-mcp-server:latest
+          image: quay.io/causa-ai-hub/causa-mcp-server:0.0.1
           ports:
             - containerPort: 8081
               name: http
