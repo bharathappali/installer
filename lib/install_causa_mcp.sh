@@ -16,6 +16,40 @@ if [[ -n "${INSTALL_CAUSA_MCP_LIB_LOADED:-}" ]]; then return 0; fi
 readonly INSTALL_CAUSA_MCP_LIB_LOADED=1
 
 ################################################################################
+# _validate_causa_backend_ready
+# Checks that the Causa Backend deployment exists and is fully available before
+# installing the Causa MCP Server, which depends on it at startup.
+################################################################################
+_validate_causa_backend_ready() {
+    local ns="${INSTALL_NAMESPACE}"
+    local deploy="causa-backend"
+
+    write_to_log_file "INFO" "Checking Causa Backend is ready before installing Causa MCP Server..."
+
+    if ! ${KUBE_CLI} get deployment "${deploy}" -n "${ns}" &>/dev/null; then
+        log_error "Causa Backend deployment not found in namespace '${ns}'."
+        log_error "Causa MCP Server requires Causa Backend to be installed first."
+        return 1
+    fi
+
+    local ready
+    ready=$(${KUBE_CLI} get deployment "${deploy}" -n "${ns}" \
+        -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
+    local desired
+    desired=$(${KUBE_CLI} get deployment "${deploy}" -n "${ns}" \
+        -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
+
+    if [[ "${ready:-0}" != "${desired}" ]]; then
+        log_error "Causa Backend is not ready (${ready:-0}/${desired} replicas)."
+        log_error "Causa MCP Server requires Causa Backend to be fully running first."
+        return 1
+    fi
+
+    write_to_log_file "SUCCESS" "Causa Backend is ready (${ready}/${desired} replicas)"
+    return 0
+}
+
+################################################################################
 # install_causa_mcp
 ################################################################################
 install_causa_mcp() {
@@ -24,6 +58,10 @@ install_causa_mcp() {
     if [[ "${DRY_RUN}" == "true" ]]; then
         write_to_log_file "INFO" "Dry run — skipping apply"
         return 0
+    fi
+
+    if ! _validate_causa_backend_ready; then
+        return 1
     fi
 
     if ! create_namespace; then return 1; fi
@@ -67,5 +105,6 @@ uninstall_causa_mcp() {
     return 0
 }
 
+export -f _validate_causa_backend_ready
 export -f install_causa_mcp
 export -f uninstall_causa_mcp
