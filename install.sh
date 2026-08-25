@@ -5,10 +5,9 @@
 #
 # Provisions the target environment and deploys the full RCA stack:
 #   - Kubernetes MCP Server
+#   - Causa Backend (RCA engine)
 #   - Jafra MCP Server
 #   - Quarkus MCP Server
-#   - PostgreSQL
-#   - Causa Backend (RCA engine)
 #   - Causa MCP Server
 #
 # Usage:
@@ -50,7 +49,7 @@ export KUBE_CLI
 
 # Target platform — determines which infrastructure steps run.
 # Supported values: kind
-# kind  → creates a Kind cluster + local registry + installs Prometheus stack
+# kind  → creates a Kind cluster + local registry (no Prometheus — RCA is triggered on demand via Bob)
 INSTALL_TARGET="${INSTALL_TARGET:-kind}"
 export INSTALL_TARGET
 
@@ -354,7 +353,6 @@ _print_access_summary() {
         echo -e "${COLOR_CYAN}${COLOR_BOLD}========================================${COLOR_RESET}"
         echo ""
         echo -e "${COLOR_GREEN}Causa Backend API  :${COLOR_RESET}  http://localhost:30001/api/v1/diagnostics"
-        echo -e "${COLOR_GREEN}Quarkus MCP Server :${COLOR_RESET}  http://localhost:30004/mcp"
         echo -e "${COLOR_GREEN}Causa MCP Server   :${COLOR_RESET}  http://localhost:30005/mcp"
         echo ""
         if [[ -n "${LOG_FILE:-}" ]]; then
@@ -399,7 +397,6 @@ show_usage() {
     echo "    KIND_REGISTRY_PORT            Override local registry port"
     echo "    DRY_RUN=true                  Dry run mode"
     echo "    TERMINATE=true                Uninstall mode"
-    echo "    PROMETHEUS_NAMESPACE=NAME     Namespace for kube-prometheus-stack (default: monitoring)"
     echo "    DELETE_CLUSTER=true           Delete cluster on --terminate"
     echo ""
     echo "EXAMPLES:"
@@ -462,9 +459,6 @@ parse_arguments() {
             --causa-backend-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --causa-backend-image"; show_usage; exit 2; }
                 CAUSA_BACKEND_IMAGE="$2"; CAUSA_BACKEND_IMAGE_OVERRIDDEN=true; shift 2 ;;
-            --jafra-mcp-image)
-                [[ -z "${2:-}" ]] && { log_error "Value required for --jafra-mcp-image"; show_usage; exit 2; }
-                JAFRA_MCP_IMAGE="$2"; JAFRA_MCP_IMAGE_OVERRIDDEN=true; shift 2 ;;
             --quarkus-mcp-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --quarkus-mcp-image"; show_usage; exit 2; }
                 QUARKUS_MCP_IMAGE="$2"; QUARKUS_MCP_IMAGE_OVERRIDDEN=true; shift 2 ;;

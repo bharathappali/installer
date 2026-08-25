@@ -23,6 +23,11 @@ install_quarkus_mcp() {
         return 0
     fi
 
+    if _quarkus_mcp_not_released; then
+        log_warn "Quarkus MCP Server: image not yet released — skipping (set QUARKUS_MCP_IMAGE in lib/images.env to enable)"
+        return 0
+    fi
+
     if ! create_namespace; then return 1; fi
 
     local manifest="${SCRIPT_DIR}/manifests/quarkus_mcp/deployment.yaml"
@@ -42,7 +47,7 @@ install_quarkus_mcp() {
     fi
 
     write_to_log_file "SUCCESS" "Quarkus MCP Server installed"
-    write_to_log_file "INFO"    "NodePort: localhost:30004  (MCP: /mcp, SSE: /mcp/sse)"
+    write_to_log_file "INFO"    "NodePort: localhost:30004"
     return 0
 }
 
@@ -54,6 +59,11 @@ uninstall_quarkus_mcp() {
 
     if [[ "${DRY_RUN}" == "true" ]]; then
         write_to_log_file "INFO" "Dry run — skipping delete"
+        return 0
+    fi
+
+    if _quarkus_mcp_not_released; then
+        write_to_log_file "INFO" "Quarkus MCP Server: image not released — nothing to uninstall"
         return 0
     fi
 
