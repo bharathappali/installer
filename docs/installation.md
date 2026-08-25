@@ -7,11 +7,16 @@ For a quick start, see the [README](../README.md).
 
 | Tool | Purpose | Install |
 |---|---|---|
-| `docker` | Container runtime for Kind | [docs.docker.com](https://docs.docker.com/get-docker/) |
+| `docker` or `podman` | Container runtime for Kind | [docker](https://docs.docker.com/get-docker/) / [podman](https://podman.io/getting-started/installation) |
 | `kind` | Local Kubernetes cluster | [kind.sigs.k8s.io](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) |
 | `kubectl` | Kubernetes CLI | [kubernetes.io](https://kubernetes.io/docs/tasks/tools/) |
-| `helm` | Kubernetes package manager (v3+) | [helm.sh](https://helm.sh/docs/intro/install/) |
-| `curl`, `sed`, `awk` | Script utilities | Pre-installed on macOS and most Linux distributions |
+| `curl`, `grep`, `sed`, `awk` | Script utilities | Pre-installed on macOS and most Linux distributions |
+
+> **Podman users:** Kind requires rootful mode. Initialise the machine with:
+> ```bash
+> podman machine init --rootful --cpus 4 --memory 4096
+> podman machine start
+> ```
 
 ## Default installation
 
@@ -50,10 +55,10 @@ See [Configuration](configuration.md) for the full reference.
 Components are deployed in this sequence:
 
 1. Kind cluster + local registry
-2. Prometheus Stack (kube-prometheus-stack + Alertmanager webhook)
-3. Kubernetes MCP Server
-4. Quarkus MCP Server
-5. PostgreSQL
+2. Kubernetes MCP Server
+3. Jafra MCP Server _(skipped if image not set)_
+4. Quarkus MCP Server _(skipped if image not set)_
+5. PostgreSQL + pgvector
 6. Causa Backend
 7. Causa MCP Server
 

@@ -27,7 +27,6 @@ For installation steps, see the [Installation Guide](installation.md).
 | `DRY_RUN` | `false` | Set to `true` to validate without installing |
 | `TERMINATE` | `false` | Set to `true` to uninstall |
 | `DELETE_CLUSTER` | `false` | Set to `true` to delete cluster on terminate |
-| `PROMETHEUS_NAMESPACE` | `monitoring` | Namespace for kube-prometheus-stack |
 
 ## Image overrides
 
@@ -43,6 +42,7 @@ Priority order (highest to lowest):
 | Flag | Component |
 |---|---|
 | `--k8s-mcp-server-image IMAGE` | Kubernetes MCP Server |
+| `--jafra-mcp-image IMAGE` | Jafra MCP Server |
 | `--causa-backend-image IMAGE` | Causa Backend |
 | `--quarkus-mcp-image IMAGE` | Quarkus MCP Server |
 | `--causa-mcp-image IMAGE` | Causa MCP Server |
@@ -52,6 +52,7 @@ Priority order (highest to lowest):
 | Variable | Component |
 |---|---|
 | `K8S_MCP_SERVER_IMAGE` | Kubernetes MCP Server |
+| `JAFRA_MCP_IMAGE` | Jafra MCP Server |
 | `CAUSA_BACKEND_IMAGE` | Causa Backend |
 | `QUARKUS_MCP_IMAGE` | Quarkus MCP Server |
 | `CAUSA_MCP_IMAGE` | Causa MCP Server |
@@ -62,9 +63,8 @@ Priority order (highest to lowest):
 # Override a component image
 ./install.sh --causa-mcp-image quay.io/causaai/causa-mcp:v0.1.0
 
-# Override multiple images
-./install.sh \
-  --quarkus-mcp-image quay.io/causaai/quarkus-mcp:v0.1.0
+# Override Jafra MCP image
+./install.sh --jafra-mcp-image quay.io/causa-ai-hub/jafra-mcp-server:0.2.0
 
 # Override via environment variable
 export CAUSA_MCP_IMAGE=quay.io/causaai/causa-mcp:v0.1.0
@@ -78,3 +78,7 @@ Every image value is validated before use:
 - Must contain a tag (e.g. `:v0.1.0` or `:latest`)
 - No spaces or shell-special characters (`;`, `|`, `&`, `$`, `` ` ``, etc.)
 - Maximum 255 characters
+
+### Optional components
+
+Jafra MCP Server and Quarkus MCP Server are skipped when their image variable is empty. To enable them, set the image in `lib/images.env` or pass the CLI flag.

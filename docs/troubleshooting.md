@@ -32,6 +32,20 @@ kubectl logs -n causa-rca -l app=causa-backend
 curl http://localhost:30001/api/v1/healthz
 ```
 
+### Jafra MCP Server
+
+```bash
+kubectl get pods -n causa-rca -l app=jafra-mcp
+kubectl logs -n causa-rca -l app=jafra-mcp
+```
+
+### Quarkus MCP Server
+
+```bash
+kubectl get pods -n causa-rca -l app=mcp-metrics
+kubectl logs -n causa-rca -l app=mcp-metrics
+```
+
 ### Causa MCP Server
 
 ```bash
@@ -39,15 +53,15 @@ kubectl get pods -n causa-rca -l app=causa-mcp
 kubectl logs -n causa-rca -l app=causa-mcp
 ```
 
-### Prometheus Stack
+### PostgreSQL
 
 ```bash
-# Check all monitoring pods
-kubectl get pods -n monitoring
+kubectl get pods -n causa-rca -l app=postgres
+kubectl logs -n causa-rca -l app=postgres
 
-# Port-forward to access UIs
-kubectl port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090
-kubectl port-forward -n monitoring svc/kube-prometheus-stack-alertmanager 9093:9093
+# Verify secrets exist
+kubectl get secret causa-db-secrets -n causa-rca
+kubectl get secret postgres-credentials -n causa-rca
 ```
 
 ### Kind cluster
@@ -62,26 +76,34 @@ kubectl get nodes
 
 ### Prerequisites missing
 
-The installer checks for `kubectl`, `docker`, `kind`, `helm`, `curl`, `sed`, and `awk` before doing anything. Install any missing tools and rerun.
+The installer checks for `kubectl`, `docker`/`podman`, `kind`, `curl`, `grep`, `sed`, and `awk` before doing anything. Install any missing tools and rerun.
 
 ```bash
 # kind — macOS
 brew install kind
 # or see https://kind.sigs.k8s.io/docs/user/quick-start/#installation
-
-# helm — macOS
-brew install helm
-# or see https://helm.sh/docs/intro/install/
 ```
 
-### Docker not running
-
-The `kind` target requires Docker to be running.
+### Container runtime not running
 
 ```bash
-# macOS — start Docker Desktop from the menu bar
-# Linux
+# Docker — macOS: start Docker Desktop from the menu bar
+# Docker — Linux
 sudo systemctl start docker
+
+# Podman — start the machine
+podman machine start
+```
+
+### Podman rootless mode
+
+Kind requires rootful Podman. Recreate the machine with rootful mode:
+
+```bash
+podman machine stop
+podman machine rm
+podman machine init --rootful --cpus 4 --memory 4096
+podman machine start
 ```
 
 ### Cluster not reachable
@@ -98,6 +120,19 @@ kind delete cluster --name causa-rca
 ./install.sh
 ```
 
+### Ports already in use (30000–30005)
+
+After deleting a Kind cluster, gvproxy (Podman/Docker network proxy) may still hold the port bindings.
+
+```bash
+# Option 1 — restart the container runtime
+podman machine stop && podman machine start
+# or restart Docker Desktop
+
+# Option 2 — reuse the existing cluster (installer is idempotent)
+./install.sh
+```
+
 ### Pod stuck in `Pending`
 
 Usually a resource or scheduling issue on the Kind node.
@@ -105,6 +140,21 @@ Usually a resource or scheduling issue on the Kind node.
 ```bash
 kubectl describe pod -n causa-rca <pod-name>
 kubectl get events -n causa-rca --sort-by='.lastTimestamp'
+```
+
+### PostgreSQL not ready
+
+The Causa Backend waits for PostgreSQL before starting. Check:
+
+```bash
+kubectl get pods -n causa-rca -l app=postgres
+kubectl describe pod -n causa-rca -l app=postgres
+```
+
+Ensure the `postgres-credentials` secret was created:
+
+```bash
+kubectl get secret postgres-credentials -n causa-rca
 ```
 
 ## Logs

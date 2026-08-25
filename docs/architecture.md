@@ -13,19 +13,21 @@ lib/
   images.env                            ← default image tags, sourced at startup
   logging.sh                            ← logging utilities and spinner
   install_utils.sh                      ← shared helpers, exit codes, error handling
-  validator.sh                          ← pre-flight checks (tools, cluster, RBAC)
+  validator.sh                          ← pre-flight checks (tools, container runtime, cluster)
   install_kind_cluster.sh               ← Kind cluster + local registry
-  install_prometheus.sh                 ← kube-prometheus-stack + Alertmanager webhook
   install_k8s_mcp.sh                    ← Kubernetes MCP Server
-  install_causa.sh                      ← Causa Backend
+  install_jafra_mcp.sh                  ← Jafra MCP Server
   install_quarkus_mcp.sh                ← Quarkus MCP Server
+  install_postgres.sh                   ← PostgreSQL + pgvector + Kubernetes secrets
+  install_causa.sh                      ← Causa Backend
   install_causa_mcp.sh                  ← Causa MCP Server
 manifests/
-  prometheus/prometheusrule.yaml        ← workload-agnostic alert rules
   k8s_mcp_server.yaml                   ← Kubernetes MCP Server (NodePort 30000)
   causa/deployment.yaml                 ← Causa Backend (NodePort 30001)
+  jafra_mcp/deployment.yaml             ← Jafra MCP Server (NodePort 30003)
   quarkus_mcp/deployment.yaml           ← Quarkus MCP Server (NodePort 30004)
   causa_mcp/deployment.yaml             ← Causa MCP Server (NodePort 30005)
+  postgres/deployment.yaml              ← PostgreSQL + pgvector (ClusterIP)
 ```
 
 ## Startup sequence
@@ -35,7 +37,7 @@ When `install.sh` is run:
 1. Loads default images from `lib/images.env`
 2. Parses CLI arguments — flags override env vars which override `lib/images.env`
 3. Initialises the log file
-4. Runs pre-flight validation (tools, Docker, cluster access, RBAC)
+4. Runs pre-flight validation (container runtime, tools, cluster access)
 5. Deploys components in sequence (see [Installation order](installation.md#installation-order))
 6. Runs post-installation health check and prints the access summary
 
@@ -49,28 +51,30 @@ CLI flag  >  exported env var  >  lib/images.env
 
 `lib/images.env` uses `${VAR:-value}` syntax, so any value already exported in the environment before the script runs is preserved. There are no hardcoded image fallbacks in the component scripts — `lib/images.env` is the single source of truth.
 
-## Target platforms
+## Container runtime detection
 
-The installer selects which infrastructure steps to run based on `--target`:
+The validator detects the available container runtime automatically:
 
-| Target | Kind cluster | Prometheus stack |
-|---|---|---|
-| `kind` (default) | ✅ Provisioned | ✅ Installed |
+1. Prefers **Podman** if `podman` is available and responding
+2. Falls back to **Docker**, with a check to detect if `docker` is actually a Podman shim
+3. Exports `CONTAINER_RUNTIME` (`docker` or `podman`) for use by the Kind cluster script
 
-Additional targets (e.g. `openshift`, `vm`) are planned for future releases.
+> Podman must run in **rootful mode** — rootless Podman is incompatible with Kind.
 
-## Alert flow
+## PostgreSQL setup
 
-On the `kind` target, Alertmanager is configured to POST to Causa Backend when any alert fires:
+`install_postgres.sh` deploys two Kubernetes Secrets before starting the workload:
 
-```
-Pod OOMKill / CrashLoop / CPU throttle
-  → Prometheus evaluates PrometheusRule
-  → Alertmanager fires
-  → POST http://causa-backend.<namespace>.svc.cluster.local:8080/api/v1/alerts
-  → Causa Backend starts RCA
-  → AI agent calls list_diagnostics / get_diagnostic via Causa MCP Server
-```
+| Secret | Keys |
+|---|---|
+| `postgres-credentials` | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` (used by the Pod) |
+| `causa-db-secrets` | `CAUSA_DB_USERNAME`, `CAUSA_DB_PASSWORD`, `CAUSA_DB_URL` (read by Causa Backend) |
+
+The pgvector extension is initialised at startup via a ConfigMap-mounted SQL script.
+
+## Optional components
+
+Jafra MCP Server and Quarkus MCP Server are deployed only when their images are set in `lib/images.env`. If the image variable is empty, the installer skips that component with a warning rather than failing.
 
 ## Manifest substitution
 
