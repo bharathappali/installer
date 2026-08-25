@@ -21,12 +21,23 @@ validate_prerequisites() {
 
     local missing=()
     # Core tools always required
-    # Accept either docker or podman as the container runtime
+    # Accept either docker or podman as the container runtime.
+    # When both are present, check whether 'docker' is a Podman shim/alias
+    # (common on macOS with Podman Desktop's docker-compat socket).  Running
+    # Kind with KIND_EXPERIMENTAL_PROVIDER=docker against a Podman-backed
+    # socket causes inspect template failures, so we must detect this case.
     local container_runtime=""
-    if check_command_exists "docker"; then
-        container_runtime="docker"
-    elif check_command_exists "podman"; then
+    if check_command_exists "podman" && podman info &>/dev/null 2>&1; then
         container_runtime="podman"
+    elif check_command_exists "docker" && docker info &>/dev/null 2>&1; then
+        # Podman ships a docker-compat shim; detect it by checking the server name
+        if docker info --format '{{.ServerVersion}}' 2>/dev/null | grep -qi "podman"; then
+            container_runtime="podman"
+        else
+            container_runtime="docker"
+        fi
+    elif check_command_exists "docker"; then
+        container_runtime="docker"
     fi
 
     local required_tools=("kubectl" "kind" "curl" "grep" "sed" "awk")
