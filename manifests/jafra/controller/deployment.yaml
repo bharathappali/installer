@@ -25,7 +25,7 @@ spec:
       containers:
         - name: controller
           image: quay.io/causa-ai-hub/jafra-controller:0.1.0
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
             - name: webhook
               containerPort: 9443

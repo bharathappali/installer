@@ -25,9 +25,25 @@ JAFRA_DEPLOY_TIMEOUT="${JAFRA_DEPLOY_TIMEOUT:-180}"
 # Returns 0 if cert-manager is installed and its main deployment is ready
 ################################################################################
 _cert_manager_ready() {
-    ${KUBE_CLI} get namespace cert-manager &>/dev/null &&
-    ${KUBE_CLI} get deployment cert-manager -n cert-manager &>/dev/null &&
-    ${KUBE_CLI} rollout status deployment/cert-manager -n cert-manager --timeout=5s &>/dev/null
+    ${KUBE_CLI} get namespace cert-manager &>/dev/null || return 1
+    ${KUBE_CLI} rollout status deployment/cert-manager         -n cert-manager --timeout=30s &>/dev/null || return 1
+    ${KUBE_CLI} rollout status deployment/cert-manager-webhook -n cert-manager --timeout=30s &>/dev/null || return 1
+    ${KUBE_CLI} rollout status deployment/cert-manager-cainjector -n cert-manager --timeout=30s &>/dev/null || return 1
+
+    # Probe the webhook by dry-running a minimal Issuer until the CA bundle is
+    # injected and the webhook accepts requests.
+    local probe; probe=$(mktemp /tmp/causa-cm-probe-XXXXXX.yaml)
+    printf 'apiVersion: cert-manager.io/v1\nkind: Issuer\nmetadata:\n  name: causa-webhook-probe\n  namespace: cert-manager\nspec:\n  selfSigned: {}\n' > "${probe}"
+    local attempt
+    for attempt in $(seq 1 30); do
+        if ${KUBE_CLI} apply --dry-run=server -f "${probe}" &>/dev/null; then
+            rm -f "${probe}"
+            return 0
+        fi
+        sleep 2
+    done
+    rm -f "${probe}"
+    return 1
 }
 
 ################################################################################
@@ -260,11 +276,13 @@ install_jafra() {
         return 0
     fi
 
+    write_to_log_file "INFO" "Waiting for cert-manager webhook to be ready..."
     if ! _cert_manager_ready; then
         log_error "cert-manager is not installed or not ready"
         log_error "Jafra controller requires cert-manager for webhook TLS certificates"
         return 1
     fi
+    write_to_log_file "SUCCESS" "cert-manager webhook is ready"
 
     if ! create_namespace; then return 1; fi
 

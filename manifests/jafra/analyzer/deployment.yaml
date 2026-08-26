@@ -29,12 +29,10 @@ spec:
         app.kubernetes.io/name: jafra-analyzer
         app.kubernetes.io/version: "0.1.0"
     spec:
-      securityContext:
-        fsGroup: 65532
       containers:
         - name: analyzer
           image: quay.io/causa-ai-hub/jafra-analyzer:0.1.0
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           env:
             - name: JAVA_TOOL_OPTIONS
               value: "-XX:+UseContainerSupport -Xms256m -Xmx1024m"
