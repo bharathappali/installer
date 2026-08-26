@@ -81,10 +81,18 @@ _start_local_registry() {
     return 0
 }
 
-# _check_ports_available — fails with a clear message if any required host port is in use.
+# _check_ports_available — fails with a clear message if any required host port is in use
+# by a non-gvproxy process.
 # Only checks the four host-mapped Kind node ports (30000, 30001, 30004, 30005). Port 30003
 # (Jafra MCP) has no hostPort mapping and is not bound on the host. Registry port is
 # excluded because _start_local_registry runs first and manages it idempotently.
+#
+# gvproxy / rootlessport exception:
+#   On rootless Podman (Linux), the user-space network proxy (gvproxy, shown as
+#   "rootlessport" or "rootlessp" in lsof) keeps port leases alive even after the
+#   containers that owned them have been removed.  When Kind creates a new cluster it
+#   talks to the *same* gvproxy instance and successfully reuses those leases, so the
+#   ports are not truly blocked.  We emit a warning for transparency but do not fail.
 _check_ports_available() {
     local ports=(30000 30001 30004 30005)
     local blocked=()
@@ -94,8 +102,14 @@ _check_ports_available() {
             local owner
             owner=$(lsof -iTCP:"${port}" -sTCP:LISTEN -n -P 2>/dev/null \
                         | awk 'NR==2{print $1" (pid "$2")"}')
-            blocked+=("${port} — in use by ${owner:-unknown process}")
-            write_to_log_file "ERROR" "Port ${port} already in use: ${owner:-unknown}"
+            # gvproxy/rootlessport holds stale leases after container removal on
+            # rootless Podman — Kind reuses its own proxy's lease, so this is safe.
+            if echo "${owner}" | grep -qiE 'rootless|gvproxy'; then
+                write_to_log_file "INFO" "Port ${port} held by gvproxy/rootlessport (${owner}) — Kind will reuse the lease"
+            else
+                blocked+=("${port} — in use by ${owner:-unknown process}")
+                write_to_log_file "ERROR" "Port ${port} already in use: ${owner:-unknown}"
+            fi
         fi
     done
 
@@ -104,14 +118,8 @@ _check_ports_available() {
         for entry in "${blocked[@]}"; do
             log_error "  port ${entry}"
         done
-        log_error "This usually means a previous Kind cluster was deleted but its port"
-        log_error "mappings are still held by the Podman/Docker network proxy (gvproxy)."
-        log_error "Fix options:"
-        log_error "  1. Restart the container runtime:"
-        log_error "       podman machine stop && podman machine start"
-        log_error "     or restart Docker Desktop"
-        log_error "  2. Or reuse the existing cluster by re-running ./install.sh"
-        log_error "     (the installer is idempotent if the cluster already exists)"
+        log_error "This usually means another application is occupying a required port."
+        log_error "Free the ports above and re-run ./install.sh"
         return 1
     fi
     return 0
@@ -283,23 +291,30 @@ uninstall_kind_cluster() {
     local runtime="${CONTAINER_RUNTIME:-docker}"
 
     # ── Step 1: Force-remove Kind node containers BEFORE calling kind delete ──
-    # On Podman/macOS, gvproxy holds host port bindings for as long as the
-    # container object exists (even in Exited state).  Removing the containers
-    # first ensures gvproxy releases ports 30000/30001/30004/30005 immediately,
-    # so that a fresh install.sh can reuse those ports without needing a runtime
-    # restart.  We do this before `kind delete cluster` so that the kind tool
-    # itself never has a chance to leave an Exited container behind.
     # Kind node containers are named: <cluster>-control-plane, <cluster>-worker,
     # <cluster>-worker2, etc.  The registry is named <cluster>-registry and must
-    # NOT be matched here — it is handled separately in Step 4.
+    # NOT be matched here — it is handled separately in Step 3.
     #
-    # Important: we use `${runtime} ps -a` directly rather than `kind get nodes`
-    # because `kind get nodes` only lists containers that Kind's bookkeeping still
-    # knows about.  If the cluster was previously half-deleted (Kind record gone
-    # but the Podman/Docker container still present), `kind get nodes` returns
-    # nothing and the orphaned container is missed — causing `kind create cluster`
-    # on the next install to fail with "node(s) already exist for a cluster with
-    # the name <cluster>".
+    # Port-release behaviour differs by OS/runtime:
+    #   macOS (Podman VM):  gvproxy runs inside the VM; removing the container
+    #     is sufficient for gvproxy to drop the port lease immediately.  A fresh
+    #     ./install.sh can reuse ports 30000/30001/30004/30005 without any
+    #     runtime restart.
+    #   Linux rootless Podman: gvproxy runs as a session-level daemon on the
+    #     host.  It keeps port leases alive for the entire session even after all
+    #     containers are removed.  lsof will still show "rootlessp" on those ports
+    #     after --terminate.  _check_ports_available handles this by recognising
+    #     gvproxy/rootlessport as the owner and skipping the hard-fail, because
+    #     Kind talks to the same gvproxy instance and successfully reclaims the
+    #     leases when the new cluster is created.
+    #
+    # We still force-remove containers here (rather than relying on kind delete)
+    # because `kind get nodes` only lists containers Kind's bookkeeping knows
+    # about.  If the cluster was previously half-deleted (Kind record gone but
+    # the Podman/Docker container still present), `kind get nodes` returns nothing
+    # and the orphaned container is missed — causing `kind create cluster` on the
+    # next install to fail with "node(s) already exist for a cluster with the
+    # name <cluster>".  Using `${runtime} ps -a` catches those orphans too.
     local node_containers
     node_containers=$(${runtime} ps -a --format '{{.Names}}' 2>/dev/null \
         | grep "^${KIND_CLUSTER_NAME}-" \
