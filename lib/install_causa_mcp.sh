@@ -46,7 +46,7 @@ _validate_causa_backend_ready() {
     if [[ "${desired}" -eq 0 ]] 2>/dev/null || [[ "${ready}" != "${desired}" ]]; then
         log_error "Causa Backend is not ready (${ready}/${desired} replicas)."
         log_error "Causa MCP Server requires Causa Backend to be fully running first."
-        log_error "Scale it back up:  kubectl scale deployment ${deploy} -n ${ns} --replicas=1"
+        log_error "Scale it back up:  ${KUBE_CLI} scale deployment ${deploy} -n ${ns} --replicas=1"
         return 1
     fi
 
