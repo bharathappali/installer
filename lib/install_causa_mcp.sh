@@ -32,16 +32,21 @@ _validate_causa_backend_ready() {
         return 1
     fi
 
-    local ready
+    # readyReplicas is absent from the status JSON (not "0") when no pods are up,
+    # so we must default an empty result to "0" explicitly after command substitution.
+    local ready desired
     ready=$(${KUBE_CLI} get deployment "${deploy}" -n "${ns}" \
-        -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo "0")
-    local desired
+        -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
+    ready="${ready:-0}"
     desired=$(${KUBE_CLI} get deployment "${deploy}" -n "${ns}" \
-        -o jsonpath='{.spec.replicas}' 2>/dev/null || echo "1")
+        -o jsonpath='{.spec.replicas}' 2>/dev/null)
+    desired="${desired:-0}"
 
-    if [[ "${ready:-0}" != "${desired}" ]]; then
-        log_error "Causa Backend is not ready (${ready:-0}/${desired} replicas)."
+    # A deployment scaled to 0 is explicitly stopped — treat as not ready.
+    if [[ "${desired}" -eq 0 ]] 2>/dev/null || [[ "${ready}" != "${desired}" ]]; then
+        log_error "Causa Backend is not ready (${ready}/${desired} replicas)."
         log_error "Causa MCP Server requires Causa Backend to be fully running first."
+        log_error "Scale it back up:  kubectl scale deployment ${deploy} -n ${ns} --replicas=1"
         return 1
     fi
 
