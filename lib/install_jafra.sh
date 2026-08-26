@@ -165,6 +165,83 @@ uninstall_jafra_analyzer() {
 }
 
 ################################################################################
+# _switch_agent_to_grpc
+# Switches jafra-agent from log-only mode to grpc mode once analyzer is ready
+################################################################################
+_switch_agent_to_grpc() {
+    write_to_log_file "INFO" "Switching jafra-agent to gRPC mode..."
+    if ! ${KUBE_CLI} set env daemonset/jafra-agent \
+            -n "${INSTALL_NAMESPACE}" \
+            JAFRA_MODE=grpc \
+            >>"${LOG_FILE}" 2>&1; then
+        log_error "Failed to switch agent to gRPC mode"
+        return 1
+    fi
+
+    write_to_log_file "INFO" "Waiting for agent rollout after gRPC switch..."
+    sleep 3
+    if ! ${KUBE_CLI} rollout status daemonset/jafra-agent \
+            -n "${INSTALL_NAMESPACE}" \
+            --timeout="${JAFRA_DEPLOY_TIMEOUT}s" \
+            >>"${LOG_FILE}" 2>&1; then
+        log_error "Agent did not restart successfully after gRPC switch"
+        return 1
+    fi
+
+    write_to_log_file "SUCCESS" "Agent is now streaming to analyzer via gRPC"
+    return 0
+}
+
+################################################################################
+# install_jafra_agent
+# Installs the Jafra agent (ServiceAccount + DaemonSet)
+################################################################################
+install_jafra_agent() {
+    write_to_log_file "INFO" "Installing Jafra Agent..."
+
+    # ── 1. Apply RBAC ────────────────────────────────────────────────────────
+    local manifest="${SCRIPT_DIR}/manifests/jafra/agent/rbac.yaml"
+    if ! apply_manifest "${manifest}" "${INSTALL_NAMESPACE}"; then
+        log_error "Failed to apply agent RBAC"
+        return 1
+    fi
+    write_to_log_file "SUCCESS" "Agent RBAC applied"
+
+    # ── 2. Deploy agent DaemonSet with image substitution ────────────────────
+    manifest="${SCRIPT_DIR}/manifests/jafra/agent/daemonset.yaml"
+    local img="${JAFRA_AGENT_IMAGE}"
+    write_to_log_file "INFO" "Using agent image: ${img}"
+    if ! apply_manifest "${manifest}" "${INSTALL_NAMESPACE}" \
+        "image: .*jafra-agent.*" "${img}"; then
+        log_error "Failed to apply agent DaemonSet"
+        return 1
+    fi
+
+    # ── 3. Wait for agent DaemonSet to be ready ──────────────────────────────
+    write_to_log_file "INFO" "Waiting for agent DaemonSet..."
+    if ! ${KUBE_CLI} rollout status daemonset/jafra-agent \
+            -n "${INSTALL_NAMESPACE}" \
+            --timeout="${JAFRA_DEPLOY_TIMEOUT}s" \
+            >>"${LOG_FILE}" 2>&1; then
+        log_error "Agent DaemonSet did not become ready"
+        return 1
+    fi
+
+    write_to_log_file "SUCCESS" "Agent is ready (mode: log-only)"
+    return 0
+}
+
+################################################################################
+# uninstall_jafra_agent
+################################################################################
+uninstall_jafra_agent() {
+    write_to_log_file "INFO" "Deleting Jafra Agent..."
+    delete_manifest "${SCRIPT_DIR}/manifests/jafra/agent/daemonset.yaml" "${INSTALL_NAMESPACE}"
+    delete_manifest "${SCRIPT_DIR}/manifests/jafra/agent/rbac.yaml"      "${INSTALL_NAMESPACE}"
+    write_to_log_file "SUCCESS" "Jafra Agent removed"
+}
+
+################################################################################
 # install_jafra
 # Main entry point — installs all Jafra components.
 ################################################################################
@@ -176,8 +253,10 @@ install_jafra() {
         return 0
     fi
 
-    if [[ -z "${JAFRA_CONTROLLER_IMAGE:-}" ]] || [[ -z "${JAFRA_ANALYZER_IMAGE:-}" ]]; then
-        log_warn "Jafra: JAFRA_CONTROLLER_IMAGE or JAFRA_ANALYZER_IMAGE not set — skipping (set in lib/images.env to enable)"
+    if [[ -z "${JAFRA_CONTROLLER_IMAGE:-}" ]] || \
+       [[ -z "${JAFRA_ANALYZER_IMAGE:-}" ]] || \
+       [[ -z "${JAFRA_AGENT_IMAGE:-}" ]]; then
+        log_warn "Jafra: one or more images not set — skipping (set JAFRA_*_IMAGE in lib/images.env to enable)"
         return 0
     fi
 
@@ -199,7 +278,18 @@ install_jafra() {
         return 1
     fi
 
-    write_to_log_file "SUCCESS" "Jafra Ecosystem installed (Controller + Analyzer)"
+    if ! install_jafra_agent; then
+        log_error "Failed to install Jafra agent"
+        return 1
+    fi
+
+    # Switch agent from log-only to grpc now that analyzer is ready
+    if ! _switch_agent_to_grpc; then
+        log_warn "Failed to switch agent to gRPC mode — agent will stay in log-only mode"
+        log_warn "Switch manually: kubectl set env daemonset/jafra-agent -n ${INSTALL_NAMESPACE} JAFRA_MODE=grpc"
+    fi
+
+    write_to_log_file "SUCCESS" "Jafra Ecosystem installed (Controller + Analyzer + Agent)"
     write_to_log_file "INFO"    "To enable JFR profiling on a pod, add:"
     write_to_log_file "INFO"    "  labels:"
     write_to_log_file "INFO"    "    jafra.io/enabled: \"true\""
@@ -211,7 +301,7 @@ install_jafra() {
 
 ################################################################################
 # uninstall_jafra
-# Removes all installed Jafra components.
+# Removes all installed Jafra components in reverse install order.
 ################################################################################
 uninstall_jafra() {
     log_section_silent "Uninstalling Jafra Ecosystem"
@@ -221,11 +311,14 @@ uninstall_jafra() {
         return 0
     fi
 
-    if [[ -z "${JAFRA_CONTROLLER_IMAGE:-}" ]] && [[ -z "${JAFRA_ANALYZER_IMAGE:-}" ]]; then
+    if [[ -z "${JAFRA_CONTROLLER_IMAGE:-}" ]] && \
+       [[ -z "${JAFRA_ANALYZER_IMAGE:-}" ]] && \
+       [[ -z "${JAFRA_AGENT_IMAGE:-}" ]]; then
         write_to_log_file "INFO" "Jafra: images not configured — nothing to uninstall"
         return 0
     fi
 
+    uninstall_jafra_agent
     uninstall_jafra_analyzer
     uninstall_jafra_controller
 
