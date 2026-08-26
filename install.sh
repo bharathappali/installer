@@ -76,8 +76,10 @@ CAUSA_BACKEND_IMAGE="${CAUSA_BACKEND_IMAGE:-}"
 JAFRA_MCP_IMAGE="${JAFRA_MCP_IMAGE:-}"
 QUARKUS_MCP_IMAGE="${QUARKUS_MCP_IMAGE:-}"
 CAUSA_MCP_IMAGE="${CAUSA_MCP_IMAGE:-}"
+JAFRA_CONTROLLER_IMAGE="${JAFRA_CONTROLLER_IMAGE:-}"
 export K8S_MCP_SERVER_IMAGE CAUSA_BACKEND_IMAGE
 export JAFRA_MCP_IMAGE QUARKUS_MCP_IMAGE CAUSA_MCP_IMAGE
+export JAFRA_CONTROLLER_IMAGE
 
 # Sentinel flags — set to "true" only when a CLI flag explicitly overrides an image
 K8S_MCP_SERVER_IMAGE_OVERRIDDEN=false
@@ -85,8 +87,10 @@ CAUSA_BACKEND_IMAGE_OVERRIDDEN=false
 JAFRA_MCP_IMAGE_OVERRIDDEN=false
 QUARKUS_MCP_IMAGE_OVERRIDDEN=false
 CAUSA_MCP_IMAGE_OVERRIDDEN=false
+JAFRA_CONTROLLER_IMAGE_OVERRIDDEN=false
 export K8S_MCP_SERVER_IMAGE_OVERRIDDEN CAUSA_BACKEND_IMAGE_OVERRIDDEN
 export JAFRA_MCP_IMAGE_OVERRIDDEN QUARKUS_MCP_IMAGE_OVERRIDDEN CAUSA_MCP_IMAGE_OVERRIDDEN
+export JAFRA_CONTROLLER_IMAGE_OVERRIDDEN
 
 # ---------------------------------------------------------------------------
 # Source library files
@@ -98,6 +102,7 @@ source "${SCRIPT_DIR}/lib/install_kind_cluster.sh"
 source "${SCRIPT_DIR}/lib/install_prometheus.sh"
 source "${SCRIPT_DIR}/lib/install_cert_manager.sh"
 source "${SCRIPT_DIR}/lib/install_k8s_mcp.sh"
+source "${SCRIPT_DIR}/lib/install_jafra.sh"
 source "${SCRIPT_DIR}/lib/install_jafra_mcp.sh"
 source "${SCRIPT_DIR}/lib/install_quarkus_mcp.sh"
 source "${SCRIPT_DIR}/lib/install_postgres.sh"
@@ -239,7 +244,18 @@ main() {
     log_install_success "Kubernetes MCP Server"
     installed_components+=("Kubernetes MCP Server")
 
-    # ── Step 5: Jafra MCP Server ──────────────────────────────────────────────
+    # ── Step 4: Jafra Ecosystem (Controller) ─────────────────────────────────
+    start_spinner "Installing Jafra Ecosystem..."
+    if ! install_jafra; then
+        stop_spinner
+        log_warn "Jafra Ecosystem installation skipped or failed"
+    else
+        stop_spinner
+        log_install_success "Jafra Ecosystem"
+        installed_components+=("Jafra Ecosystem")
+    fi
+
+    # ── Step 5: Jafra MCP Server ─────────────────────────────────────────────
     start_spinner "Installing Jafra MCP Server..."
     if ! install_jafra_mcp; then
         stop_spinner
@@ -355,6 +371,10 @@ uninstall_main() {
     uninstall_jafra_mcp
     stop_spinner; log_uninstall_success "Jafra MCP Server"
 
+    start_spinner "Uninstalling Jafra Ecosystem..."
+    uninstall_jafra
+    stop_spinner; log_uninstall_success "Jafra Ecosystem"
+
     if _is_kind_target; then
         start_spinner "Uninstalling cert-manager..."
         uninstall_cert_manager
@@ -458,6 +478,7 @@ show_usage() {
     echo "    --causa-backend-image IMAGE                Override Causa Backend image"
     echo "    --quarkus-mcp-image IMAGE                  Override Quarkus MCP Server image"
     echo "    --causa-mcp-image IMAGE                    Override Causa MCP Server image"
+    echo "    --jafra-controller-image IMAGE             Override Jafra Controller image"
     echo ""
     echo "ENVIRONMENT VARIABLES:"
     echo "    INSTALL_TARGET                Target platform (kind)"
@@ -535,6 +556,9 @@ parse_arguments() {
             --causa-mcp-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --causa-mcp-image"; show_usage; exit 2; }
                 CAUSA_MCP_IMAGE="$2"; CAUSA_MCP_IMAGE_OVERRIDDEN=true; shift 2 ;;
+            --jafra-controller-image)
+                [[ -z "${2:-}" ]] && { log_error "Value required for --jafra-controller-image"; show_usage; exit 2; }
+                JAFRA_CONTROLLER_IMAGE="$2"; JAFRA_CONTROLLER_IMAGE_OVERRIDDEN=true; shift 2 ;;
             -h|--help)
                 show_usage; exit 0 ;;
             *)
