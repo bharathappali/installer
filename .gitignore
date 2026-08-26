@@ -24,6 +24,10 @@ install.log
 # Ignore: .bob/artifacts/ (generated HTML reports)
 .bob/artifacts/
 
+# ── Installer runtime state ───────────────────────────────────────────────
+# Written by main() during install; read by uninstall_main() — must not be committed.
+.causa-rca-state
+
 # ── Shell script generated temp manifests ─────────────────────────────────
 # These are written to /tmp/ by the installer — listed here as documentation
 # /tmp/causa-rca-manifest-*.yaml  (handled by mktemp, not in repo)
