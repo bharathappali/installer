@@ -92,6 +92,7 @@ source "${SCRIPT_DIR}/lib/install_utils.sh"
 source "${SCRIPT_DIR}/lib/validator.sh"
 source "${SCRIPT_DIR}/lib/install_kind_cluster.sh"
 source "${SCRIPT_DIR}/lib/install_prometheus.sh"
+source "${SCRIPT_DIR}/lib/install_cert_manager.sh"
 source "${SCRIPT_DIR}/lib/install_k8s_mcp.sh"
 source "${SCRIPT_DIR}/lib/install_jafra_mcp.sh"
 source "${SCRIPT_DIR}/lib/install_quarkus_mcp.sh"
@@ -203,7 +204,20 @@ main() {
         installed_components+=("Prometheus Stack")
     fi
 
-    # ── Step 3: Kubernetes MCP Server ───────────────────────────────────────
+    # ── Step 3: cert-manager (kind target only, required by Jafra) ───────────
+    if _is_kind_target; then
+        start_spinner "Installing cert-manager..."
+        if ! install_cert_manager; then
+            stop_spinner
+            log_error "Failed to install cert-manager"
+            exit 1
+        fi
+        stop_spinner
+        log_install_success "cert-manager"
+        installed_components+=("cert-manager")
+    fi
+
+    # ── Step 4: Kubernetes MCP Server ───────────────────────────────────────
     start_spinner "Installing Kubernetes MCP Server..."
     if ! install_kubernetes_mcp_server; then
         stop_spinner
@@ -214,7 +228,7 @@ main() {
     log_install_success "Kubernetes MCP Server"
     installed_components+=("Kubernetes MCP Server")
 
-    # ── Step 4: Jafra MCP Server ──────────────────────────────────────────────
+    # ── Step 5: Jafra MCP Server ──────────────────────────────────────────────
     start_spinner "Installing Jafra MCP Server..."
     if ! install_jafra_mcp; then
         stop_spinner
@@ -225,7 +239,7 @@ main() {
         installed_components+=("Jafra MCP Server")
     fi
 
-    # ── Step 5: Quarkus MCP Server ───────────────────────────────────────────
+    # ── Step 6: Quarkus MCP Server ───────────────────────────────────────────
     start_spinner "Installing Quarkus MCP Server..."
     if ! install_quarkus_mcp; then
         stop_spinner
@@ -236,7 +250,7 @@ main() {
         installed_components+=("Quarkus MCP Server")
     fi
 
-    # ── Step 6: PostgreSQL ───────────────────────────────────────────────────
+    # ── Step 7: PostgreSQL ───────────────────────────────────────────────────
     start_spinner "Installing PostgreSQL..."
     if ! install_postgres; then
         stop_spinner
@@ -247,7 +261,7 @@ main() {
     log_install_success "PostgreSQL"
     installed_components+=("PostgreSQL")
 
-    # ── Step 7: Causa Backend ────────────────────────────────────────────────
+    # ── Step 8: Causa Backend ────────────────────────────────────────────────
     start_spinner "Installing Causa Backend..."
     if ! install_causa; then
         stop_spinner
@@ -258,7 +272,7 @@ main() {
     log_install_success "Causa Backend"
     installed_components+=("Causa Backend")
 
-    # ── Step 8: Causa MCP Server ─────────────────────────────────────────────
+    # ── Step 9: Causa MCP Server ─────────────────────────────────────────────
     start_spinner "Installing Causa MCP Server..."
     if ! install_causa_mcp; then
         stop_spinner
@@ -314,6 +328,12 @@ uninstall_main() {
     start_spinner "Uninstalling Jafra MCP Server..."
     uninstall_jafra_mcp
     stop_spinner; log_uninstall_success "Jafra MCP Server"
+
+    if _is_kind_target; then
+        start_spinner "Uninstalling cert-manager..."
+        uninstall_cert_manager
+        stop_spinner; log_uninstall_success "cert-manager"
+    fi
 
     start_spinner "Uninstalling Causa Backend..."
     if ! uninstall_causa; then
