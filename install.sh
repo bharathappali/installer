@@ -202,6 +202,7 @@ main() {
         stop_spinner
         log_install_success "Prometheus Stack (kube-prometheus-stack)"
         installed_components+=("Prometheus Stack")
+    fi
 
     # ── Step 3: cert-manager (kind target only, required by Jafra) ───────────
     if _is_kind_target; then
