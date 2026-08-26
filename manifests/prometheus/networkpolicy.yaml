@@ -1,0 +1,30 @@
+# NetworkPolicy — allow Alertmanager to POST alerts to the Causa Backend webhook.
+# Namespace placeholder: PLACEHOLDER_NAMESPACE  (replaced by installer at apply time)
+#
+# Without this policy, clusters with a default-deny ingress NetworkPolicy will
+# silently drop the Alertmanager webhook calls to /api/v1/alerts on port 8080.
+#
+# Allows ingress to the Causa Backend pod (app=causa-backend) from:
+#   - The Prometheus monitoring namespace (kube-prometheus-stack Alertmanager)
+#
+# On OpenShift with User Workload Monitoring, also allow from
+# openshift-user-workload-monitoring — add that namespaceSelector if needed.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-alertmanager-to-causa-backend
+  namespace: PLACEHOLDER_NAMESPACE
+spec:
+  podSelector:
+    matchLabels:
+      app: causa-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080

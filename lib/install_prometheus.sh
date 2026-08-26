@@ -80,10 +80,14 @@ alertmanager:
     route:
       # Send all alerts to the causa-webhook receiver by default
       receiver: causa-webhook
-      group_by: ['namespace', 'alertname', 'job']
+      # Group by pod so each affected pod fires its alert independently
+      # rather than batching all pods in the namespace into one notification.
+      group_by: ['namespace', 'alertname', 'pod']
       group_wait: 10s
       group_interval: 1m
-      repeat_interval: 10m
+      # 15m matches the Causa Backend cooldown period — ensures the same alert
+      # is not re-sent before a previous RCA has had time to complete.
+      repeat_interval: 15m
     receivers:
       - name: causa-webhook
         webhook_configs:
@@ -238,23 +242,24 @@ install_prometheus() {
         write_to_log_file "INFO" "Namespace already exists: ${INSTALL_NAMESPACE}"
     fi
 
-    # ── 7. Apply PrometheusRule (workload-agnostic — fires for any pod in namespace) ──
-    local rule_manifest="${SCRIPT_DIR}/manifests/prometheus/prometheusrule.yaml"
-    if [[ -f "${rule_manifest}" ]]; then
-        write_to_log_file "INFO" "Applying PrometheusRule: ${rule_manifest}"
-        # Substitute the namespace placeholder before applying
-        local tmp; tmp=$(mktemp /tmp/causa-prom-rule-XXXXXX.yaml)
-        sed "s/PLACEHOLDER_NAMESPACE/${INSTALL_NAMESPACE}/g" "${rule_manifest}" > "${tmp}"
-        if ! ${KUBE_CLI} apply -f "${tmp}" >>"${LOG_FILE}" 2>&1; then
+    # ── 7. Apply PrometheusRule and NetworkPolicy ─────────────────────────────
+    local prom_dir="${SCRIPT_DIR}/manifests/prometheus"
+    for manifest in "${prom_dir}/prometheusrule.yaml" "${prom_dir}/networkpolicy.yaml"; do
+        if [[ -f "${manifest}" ]]; then
+            write_to_log_file "INFO" "Applying manifest: ${manifest}"
+            local tmp; tmp=$(mktemp /tmp/causa-prom-manifest-XXXXXX.yaml)
+            sed "s/PLACEHOLDER_NAMESPACE/${INSTALL_NAMESPACE}/g" "${manifest}" > "${tmp}"
+            if ! ${KUBE_CLI} apply -f "${tmp}" >>"${LOG_FILE}" 2>&1; then
+                rm -f "${tmp}"
+                log_error "Failed to apply ${manifest}"
+                return 1
+            fi
             rm -f "${tmp}"
-            log_error "Failed to apply PrometheusRule"
-            return 1
+            write_to_log_file "SUCCESS" "Applied: $(basename "${manifest}") to namespace: ${INSTALL_NAMESPACE}"
+        else
+            write_to_log_file "WARN" "Manifest not found: ${manifest} — skipping"
         fi
-        rm -f "${tmp}"
-        write_to_log_file "SUCCESS" "PrometheusRule applied to namespace: ${INSTALL_NAMESPACE}"
-    else
-        write_to_log_file "WARN" "PrometheusRule manifest not found at ${rule_manifest} — skipping"
-    fi
+    done
 
     write_to_log_file "SUCCESS" "Prometheus stack installed"
     write_to_log_file "INFO"    "Alertmanager webhook → $(_causa_alertmanager_webhook_url)"
@@ -290,18 +295,16 @@ uninstall_prometheus() {
         write_to_log_file "INFO" "kube-prometheus-stack not installed — nothing to remove"
     fi
 
-    # Remove PrometheusRule from the install namespace (use manifest to avoid hardcoding the name)
-    local rule_manifest="${SCRIPT_DIR}/manifests/prometheus/prometheusrule.yaml"
-    if [[ -f "${rule_manifest}" ]]; then
-        local tmp; tmp=$(mktemp /tmp/causa-prom-rule-XXXXXX.yaml)
-        sed "s/PLACEHOLDER_NAMESPACE/${INSTALL_NAMESPACE}/g" "${rule_manifest}" > "${tmp}"
-        ${KUBE_CLI} delete -f "${tmp}" --ignore-not-found=true >>"${LOG_FILE}" 2>&1 || true
-        rm -f "${tmp}"
-    else
-        ${KUBE_CLI} delete prometheusrule causa-rca-alerts \
-            -n "${INSTALL_NAMESPACE}" --ignore-not-found=true \
-            >>"${LOG_FILE}" 2>&1 || true
-    fi
+    # Remove PrometheusRule and NetworkPolicy from the install namespace
+    local prom_dir="${SCRIPT_DIR}/manifests/prometheus"
+    for manifest in "${prom_dir}/prometheusrule.yaml" "${prom_dir}/networkpolicy.yaml"; do
+        if [[ -f "${manifest}" ]]; then
+            local tmp; tmp=$(mktemp /tmp/causa-prom-manifest-XXXXXX.yaml)
+            sed "s/PLACEHOLDER_NAMESPACE/${INSTALL_NAMESPACE}/g" "${manifest}" > "${tmp}"
+            ${KUBE_CLI} delete -f "${tmp}" --ignore-not-found=true >>"${LOG_FILE}" 2>&1 || true
+            rm -f "${tmp}"
+        fi
+    done
 
     # Delete the monitoring namespace (removes all Prometheus/Alertmanager pods)
     if ${KUBE_CLI} get namespace "${PROMETHEUS_NAMESPACE}" &>/dev/null; then
