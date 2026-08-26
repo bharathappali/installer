@@ -82,8 +82,9 @@ _start_local_registry() {
 }
 
 # _check_ports_available — fails with a clear message if any required host port is in use.
-# Only checks the Kind node ports (30000-30005). Registry port is excluded because
-# _start_local_registry runs first and manages port ${KIND_REGISTRY_PORT} idempotently.
+# Only checks the four host-mapped Kind node ports (30000, 30001, 30004, 30005). Port 30003
+# (Jafra MCP) has no hostPort mapping and is not bound on the host. Registry port is
+# excluded because _start_local_registry runs first and manages it idempotently.
 _check_ports_available() {
     local ports=(30000 30001 30004 30005)
     local blocked=()
@@ -234,12 +235,12 @@ install_kind_cluster() {
         # prior `kind delete cluster` removed the Kind record but left the container
         # behind, `kind create cluster` fails with "node(s) already exist".
         local orphaned
-        orphaned=$(${CONTAINER_RUNTIME:-docker} ps -a --format '{{.Names}}' 2>/dev/null \
+        orphaned=$(${runtime} ps -a --format '{{.Names}}' 2>/dev/null \
             | grep "^${KIND_CLUSTER_NAME}-" \
             | grep -v "^${KIND_REGISTRY_NAME}$" || true)
         if [[ -n "${orphaned}" ]]; then
             write_to_log_file "WARN" "Orphaned Kind node container(s) found — removing before cluster creation..."
-            echo "${orphaned}" | xargs ${CONTAINER_RUNTIME:-docker} rm -f >>"${LOG_FILE}" 2>&1 || true
+            echo "${orphaned}" | xargs ${runtime} rm -f >>"${LOG_FILE}" 2>&1 || true
             write_to_log_file "SUCCESS" "Orphaned containers removed"
         fi
 
@@ -318,20 +319,7 @@ uninstall_kind_cluster() {
         write_to_log_file "INFO" "Kind cluster '${KIND_CLUSTER_NAME}' not found — nothing to delete"
     fi
 
-    # ── Step 3: Second-pass cleanup after kind delete ─────────────────────────
-    # Step 1 already removed containers before kind delete ran. This pass catches
-    # anything kind delete itself may have re-created or left in an Exited state.
-    local leftover
-    leftover=$(${runtime} ps -a --format '{{.Names}}' 2>/dev/null \
-        | grep "^${KIND_CLUSTER_NAME}-" \
-        | grep -v "^${KIND_REGISTRY_NAME}$" || true)
-    if [[ -n "${leftover}" ]]; then
-        write_to_log_file "INFO" "Removing residual Kind node containers..."
-        echo "${leftover}" | xargs ${runtime} rm -f >>"${LOG_FILE}" 2>&1 || true
-        write_to_log_file "SUCCESS" "Residual Kind node containers removed"
-    fi
-
-    # ── Step 4: Remove the local registry ────────────────────────────────────
+    # ── Step 3: Remove the local registry ────────────────────────────────────
     if _kind_registry_exists; then
         write_to_log_file "INFO" "Stopping and removing local registry '${KIND_REGISTRY_NAME}'..."
         ${runtime} stop "${KIND_REGISTRY_NAME}" >>"${LOG_FILE}" 2>&1 || true
