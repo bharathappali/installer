@@ -23,17 +23,20 @@ validate_prerequisites() {
 
     if [[ "${INSTALL_TARGET:-kind}" == "openshift" ]]; then
         # ── OpenShift target ─────────────────────────────────────────────────
-        # Required: kubectl (or oc), helm, curl, grep, sed, awk
+        # Required: oc OR kubectl, helm, curl, grep, sed, awk
         # Not required: kind, docker/podman (no local cluster management)
-        local required_tools=("kubectl" "helm" "curl" "grep" "sed" "awk")
+        # oc is preferred; kubectl is accepted as a fallback. Requiring kubectl
+        # unconditionally would reject valid OCP environments that have oc only.
+        local required_tools=("helm" "curl" "grep" "sed" "awk")
 
-        # oc is preferred on OpenShift but kubectl works too — check for oc
-        # separately so we can give a more helpful message if absent.
         if check_command_exists "oc"; then
             write_to_log_file "SUCCESS" "oc (OpenShift CLI) found: $(oc version --client --short 2>/dev/null || echo 'unknown')"
-        else
-            write_to_log_file "WARN" "'oc' CLI not found — using kubectl. Some OpenShift-specific operations (e.g. SCC) may need oc."
+        elif check_command_exists "kubectl"; then
+            write_to_log_file "SUCCESS" "kubectl found (oc not present — some OpenShift-specific operations may need oc)"
             write_to_log_file "WARN" "Install oc: https://docs.openshift.com/container-platform/latest/cli_reference/openshift_cli/getting-started-cli.html"
+        else
+            log_error "Required tool not found: oc (or kubectl)"
+            missing+=("oc or kubectl")
         fi
 
         for tool in "${required_tools[@]}"; do
@@ -48,6 +51,7 @@ validate_prerequisites() {
         if [[ ${#missing[@]} -gt 0 ]]; then
             log_error "Missing required tools: ${missing[*]}"
             log_error "Install them and retry."
+            log_error "  - oc:      https://docs.openshift.com/container-platform/latest/cli_reference/openshift_cli/getting-started-cli.html"
             log_error "  - kubectl: https://kubernetes.io/docs/tasks/tools/"
             log_error "  - helm:    https://helm.sh/docs/intro/install/"
             return 1
