@@ -42,7 +42,7 @@ spec:
             - name: CAUSA_MCP_K8S_ENDPOINT
               value: "http://kubernetes-mcp-server.PLACEHOLDER_NAMESPACE.svc.cluster.local:8080"
             - name: CAUSA_MCP_QUARKUS_ENDPOINT
-              value: "http://quarkus-mcp.PLACEHOLDER_NAMESPACE.svc.cluster.local:8084"
+              value: "http://mcp-metrics.PLACEHOLDER_NAMESPACE.svc.cluster.local:8080"
             # ----------------------------------------------------------------
             # LLM configuration (optional — app starts without it)
             # Set via kubectl create secret or helm values in production
