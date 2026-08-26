@@ -10,7 +10,6 @@ For a quick start, see the [README](../README.md).
 | `docker` or `podman` | Container runtime for Kind | [docker](https://docs.docker.com/get-docker/) / [podman](https://podman.io/getting-started/installation) |
 | `kind` | Local Kubernetes cluster | [kind.sigs.k8s.io](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) |
 | `kubectl` | Kubernetes CLI | [kubernetes.io](https://kubernetes.io/docs/tasks/tools/) |
-| `helm` | Kubernetes package manager (required for Prometheus/kube-prometheus-stack) | [helm.sh](https://helm.sh/docs/intro/install/) |
 | `curl`, `grep`, `sed`, `awk` | Script utilities | Pre-installed on macOS and most Linux distributions |
 
 > **Podman users:** Kind requires rootful mode. Initialise the machine with:

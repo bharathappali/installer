@@ -29,7 +29,7 @@ kubectl get pods -n causa-rca -l app=causa-backend
 kubectl logs -n causa-rca -l app=causa-backend
 
 # Health check (requires NodePort access)
-curl http://localhost:30001/api/v1/healthz
+curl http://localhost:30001/q/health/ready
 ```
 
 ### Jafra MCP Server
