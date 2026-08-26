@@ -22,7 +22,9 @@ JAFRA_DEPLOY_TIMEOUT="${JAFRA_DEPLOY_TIMEOUT:-180}"
 
 ################################################################################
 # _cert_manager_ready
-# Returns 0 if cert-manager is installed and its main deployment is ready
+# Returns 0 if cert-manager's deployments are ready and its webhook accepts a
+# dry-run Issuer after CA bundle injection; returns 1 if the namespace is
+# missing, any deployment fails to become ready, or the probe fails all retries
 ################################################################################
 _cert_manager_ready() {
     ${KUBE_CLI} get namespace cert-manager &>/dev/null || return 1
@@ -32,7 +34,10 @@ _cert_manager_ready() {
 
     # Probe the webhook by dry-running a minimal Issuer until the CA bundle is
     # injected and the webhook accepts requests.
-    local probe; probe=$(mktemp /tmp/causa-cm-probe-XXXXXX.yaml)
+    local probe; probe=$(mktemp /tmp/causa-$$-cm-probe-XXXXXX.yaml) || {
+        log_error "mktemp failed — cannot create cert-manager webhook probe file"
+        return 1
+    }
     printf 'apiVersion: cert-manager.io/v1\nkind: Issuer\nmetadata:\n  name: causa-webhook-probe\n  namespace: cert-manager\nspec:\n  selfSigned: {}\n' > "${probe}"
     local attempt
     for attempt in $(seq 1 30); do

@@ -121,8 +121,10 @@ enable_spinner_trap   # lib/logging.sh       — stop spinner cleanly on INT/TER
 
 # ---------------------------------------------------------------------------
 # Temp file cleanup — remove stale files from a previous crashed run.
+# Only removes files whose name encodes this process's PID, so a concurrent
+# installer invocation on the same host is not affected.
 # ---------------------------------------------------------------------------
-rm -f /tmp/causa-*.yaml
+rm -f /tmp/causa-$$-*.yaml
 
 # ---------------------------------------------------------------------------
 # Logging initialisation
