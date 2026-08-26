@@ -41,6 +41,10 @@ fi
 # ---------------------------------------------------------------------------
 MANIFESTS_DIR="${SCRIPT_DIR}/manifests"
 
+# State file — persists values that must survive across separate invocations
+# (e.g. install vs. uninstall).  Written by main(), read by uninstall_main().
+INSTALLER_STATE_FILE="${SCRIPT_DIR}/.causa-rca-state"
+
 # Namespace where all RCA components are deployed
 INSTALL_NAMESPACE="${INSTALL_NAMESPACE:-causa-rca}"
 export INSTALL_NAMESPACE
@@ -155,7 +159,14 @@ main() {
         exit 1
     fi
 
+    # kind-only pre-flight: persist the detected runtime (so uninstall targets
+    # the same daemon) and verify the runtime daemon is actually reachable.
     if _is_kind_target; then
+        {
+            echo "CONTAINER_RUNTIME=${CONTAINER_RUNTIME}"
+        } > "${INSTALLER_STATE_FILE}"
+        write_to_log_file "INFO" "Container runtime persisted: ${CONTAINER_RUNTIME} (${INSTALLER_STATE_FILE})"
+
         if ! validate_docker_running; then
             log_error "Docker is not running"
             exit 1
@@ -316,6 +327,21 @@ uninstall_main() {
     local start_time; start_time=$(date +%s)
 
     log_file_only "Starting Causa RCA uninstallation..."
+
+    # Restore the container runtime for kind targets — ensures uninstall drives
+    # the same daemon (docker vs podman) that was detected at install time,
+    # even when CONTAINER_RUNTIME is not set in the current shell environment.
+    if _is_kind_target; then
+        if [[ -f "${INSTALLER_STATE_FILE}" ]]; then
+            # shellcheck source=/dev/null
+            source "${INSTALLER_STATE_FILE}"
+            write_to_log_file "INFO" "Container runtime restored from state file: ${CONTAINER_RUNTIME}"
+        else
+            CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-docker}"
+            write_to_log_file "WARN" "State file not found (${INSTALLER_STATE_FILE}); defaulting to ${CONTAINER_RUNTIME}"
+        fi
+        export CONTAINER_RUNTIME
+    fi
 
     start_spinner "Uninstalling Causa MCP Server..."
     uninstall_causa_mcp
