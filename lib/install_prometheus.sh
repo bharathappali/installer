@@ -14,8 +14,8 @@
 #   - The PrometheusRule CRD (monitoring.coreos.com/v1) does not exist on Kind
 #     until the Prometheus Operator is installed
 #
-# Use --skip-prometheus-setup when targeting OpenShift or a cluster that
-# already has Prometheus + Alertmanager running.
+# On OpenShift or any cluster that already has Prometheus + Alertmanager running,
+# set INSTALL_TARGET to a non-kind value — the installer skips this step entirely.
 #
 # Helm chart: prometheus-community/kube-prometheus-stack
 # Chart docs: https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
@@ -166,7 +166,7 @@ install_prometheus() {
         write_to_log_file "INFO" "Helm repo already present (or add failed — continuing)"
     fi
 
-    if ! helm repo update >>"${LOG_FILE}" 2>&1; then
+    if ! helm repo update "${PROMETHEUS_HELM_REPO_NAME}" >>"${LOG_FILE}" 2>&1; then
         write_to_log_file "WARN" "helm repo update failed — using cached chart index"
     fi
     write_to_log_file "SUCCESS" "Helm repo ready: ${PROMETHEUS_HELM_REPO_NAME}"
@@ -290,10 +290,18 @@ uninstall_prometheus() {
         write_to_log_file "INFO" "kube-prometheus-stack not installed — nothing to remove"
     fi
 
-    # Remove PrometheusRule from the install namespace
-    ${KUBE_CLI} delete prometheusrule causa-rca-alerts \
-        -n "${INSTALL_NAMESPACE}" --ignore-not-found=true \
-        >>"${LOG_FILE}" 2>&1 || true
+    # Remove PrometheusRule from the install namespace (use manifest to avoid hardcoding the name)
+    local rule_manifest="${SCRIPT_DIR}/manifests/prometheus/prometheusrule.yaml"
+    if [[ -f "${rule_manifest}" ]]; then
+        local tmp; tmp=$(mktemp /tmp/causa-prom-rule-XXXXXX.yaml)
+        sed "s/PLACEHOLDER_NAMESPACE/${INSTALL_NAMESPACE}/g" "${rule_manifest}" > "${tmp}"
+        ${KUBE_CLI} delete -f "${tmp}" --ignore-not-found=true >>"${LOG_FILE}" 2>&1 || true
+        rm -f "${tmp}"
+    else
+        ${KUBE_CLI} delete prometheusrule causa-rca-alerts \
+            -n "${INSTALL_NAMESPACE}" --ignore-not-found=true \
+            >>"${LOG_FILE}" 2>&1 || true
+    fi
 
     # Delete the monitoring namespace (removes all Prometheus/Alertmanager pods)
     if ${KUBE_CLI} get namespace "${PROMETHEUS_NAMESPACE}" &>/dev/null; then
@@ -325,5 +333,7 @@ uninstall_prometheus() {
     return 0
 }
 
+export -f _causa_alertmanager_webhook_url
+export -f _write_alertmanager_values
 export -f install_prometheus
 export -f uninstall_prometheus

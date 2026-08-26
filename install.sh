@@ -6,9 +6,10 @@
 # Provisions the target environment and deploys the full RCA stack:
 #   - Prometheus Stack (kube-prometheus-stack) + Alertmanager webhook → Causa
 #   - Kubernetes MCP Server
-#   - Causa Backend (RCA engine)
 #   - Jafra MCP Server
 #   - Quarkus MCP Server
+#   - PostgreSQL
+#   - Causa Backend (RCA engine)
 #   - Causa MCP Server
 #
 # Usage:

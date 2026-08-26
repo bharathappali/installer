@@ -318,10 +318,7 @@ validate_prometheus_available() {
         return 0
     fi
 
-    local prometheus_url
-    prometheus_url="http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090"
-
-    write_to_log_file "INFO" "Checking Prometheus readiness at ${prometheus_url}/-/ready ..."
+    write_to_log_file "INFO" "Checking Prometheus readiness (StatefulSet in monitoring namespace)..."
 
     # Check for the kube-prometheus-stack Prometheus StatefulSet in monitoring namespace
     local ready_replicas total_replicas
