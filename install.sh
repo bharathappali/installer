@@ -155,17 +155,14 @@ main() {
         exit 1
     fi
 
-    # Persist the detected runtime so uninstall targets the same daemon.
-    # Only meaningful for kind targets, which use CONTAINER_RUNTIME to drive
-    # docker/podman commands directly.
+    # kind-only pre-flight: persist the detected runtime (so uninstall targets
+    # the same daemon) and verify the runtime daemon is actually reachable.
     if _is_kind_target; then
         {
             echo "CONTAINER_RUNTIME=${CONTAINER_RUNTIME}"
         } > "${INSTALLER_STATE_FILE}"
         write_to_log_file "INFO" "Container runtime persisted: ${CONTAINER_RUNTIME} (${INSTALLER_STATE_FILE})"
-    fi
 
-    if _is_kind_target; then
         if ! validate_docker_running; then
             log_error "Docker is not running"
             exit 1
