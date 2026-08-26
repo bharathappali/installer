@@ -1,0 +1,119 @@
+# PrometheusRule for Quarkus/JVM workloads managed by Causa RCA.
+# Namespace placeholder: PLACEHOLDER_NAMESPACE  (replaced by installer at apply time)
+#
+# These four alert rules are workload-agnostic: they match ANY pod in the
+# install namespace, not a specific app name. Causa Backend receives the alert
+# and uses the pod labels (app, workload_name, etc.) to identify the workload.
+#
+# When any alert fires, Alertmanager POSTs to:
+#   http://causa-backend.PLACEHOLDER_NAMESPACE.svc.cluster.local:8080/api/v1/alerts
+# which triggers Causa Backend to start an RCA for the affected workload.
+#
+# Required: Prometheus Operator must be installed (kube-prometheus-stack on Kind,
+# built-in User Workload Monitoring on OpenShift).
+#
+# Label/annotation keys consumed by Causa Backend's alert handler:
+#   labels.namespace     — namespace used in the diagnostic record
+#   annotations.summary  — included in the RCA context sent to the LLM
+# Causa resolves workload_name from the pod labels at alert-handling time.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: causa-rca-alerts
+  namespace: PLACEHOLDER_NAMESPACE
+  labels:
+    # Picked up by the Prometheus Operator when ruleSelector: {} is set
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: causa-rca.rules
+      interval: 15s
+      rules:
+
+        # ── OOMKilled ──────────────────────────────────────────────────────
+        # Fires for any container in the namespace that was OOMKilled.
+        # Causa identifies the workload from the pod/container labels in the alert.
+        - alert: QuarkusAppOOMKilled
+          expr: |
+            kube_pod_container_status_last_terminated_reason{
+              reason="OOMKilled",
+              namespace="PLACEHOLDER_NAMESPACE"
+            } == 1
+          for: 0m
+          labels:
+            severity: critical
+            namespace: PLACEHOLDER_NAMESPACE
+          annotations:
+            summary: "Container OOMKilled in PLACEHOLDER_NAMESPACE"
+            description: >-
+              A JVM container in namespace PLACEHOLDER_NAMESPACE exceeded its
+              memory limit and was killed by the kernel OOM reaper.
+
+        # ── CrashLoopBackOff ───────────────────────────────────────────────
+        # Fires for any pod in the namespace restarting more than twice in 10m.
+        - alert: QuarkusAppCrashLoopBackOff
+          expr: |
+            increase(
+              kube_pod_container_status_restarts_total{
+                namespace="PLACEHOLDER_NAMESPACE"
+              }[10m]
+            ) > 2
+          for: 0m
+          labels:
+            severity: critical
+            namespace: PLACEHOLDER_NAMESPACE
+          annotations:
+            summary: "Pod CrashLoopBackOff in PLACEHOLDER_NAMESPACE"
+            description: >-
+              A pod in namespace PLACEHOLDER_NAMESPACE has restarted more than
+              twice in the last 10 minutes.
+
+        # ── CPU Throttling ─────────────────────────────────────────────────
+        # Fires for any container in the namespace being throttled above 50%
+        # for at least 2 minutes.
+        - alert: QuarkusAppCPUThrottling
+          expr: |
+            rate(
+              container_cpu_cfs_throttled_periods_total{
+                namespace="PLACEHOLDER_NAMESPACE",
+                container!=""
+              }[5m]
+            )
+            /
+            rate(
+              container_cpu_cfs_periods_total{
+                namespace="PLACEHOLDER_NAMESPACE",
+                container!=""
+              }[5m]
+            ) > 0.5
+          for: 2m
+          labels:
+            severity: warning
+            namespace: PLACEHOLDER_NAMESPACE
+          annotations:
+            summary: "CPU throttling above 50% in PLACEHOLDER_NAMESPACE"
+            description: >-
+              More than half of CPU scheduling periods for a container in
+              namespace PLACEHOLDER_NAMESPACE are being throttled.
+
+        # ── Frequent Restarts ──────────────────────────────────────────────
+        # Fires for any pod in the namespace that has restarted more than 5
+        # times in the last 30 minutes — indicates a persistent failure.
+        - alert: QuarkusAppFrequentRestarts
+          expr: |
+            increase(
+              kube_pod_container_status_restarts_total{
+                namespace="PLACEHOLDER_NAMESPACE"
+              }[30m]
+            ) > 5
+          for: 0m
+          labels:
+            severity: warning
+            namespace: PLACEHOLDER_NAMESPACE
+          annotations:
+            summary: "Frequent pod restarts in PLACEHOLDER_NAMESPACE"
+            description: >-
+              A pod in namespace PLACEHOLDER_NAMESPACE has restarted more than
+              5 times in 30 minutes. This suggests a slow memory leak or a
+              configuration issue preventing clean JVM startup.
