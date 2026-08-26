@@ -129,6 +129,42 @@ uninstall_jafra_controller() {
 }
 
 ################################################################################
+# install_jafra_analyzer
+# Installs the Jafra analyzer (PVC + Deployment + Service)
+################################################################################
+install_jafra_analyzer() {
+    write_to_log_file "INFO" "Installing Jafra Analyzer..."
+
+    local manifest="${SCRIPT_DIR}/manifests/jafra/analyzer/deployment.yaml"
+    local img="${JAFRA_ANALYZER_IMAGE}"
+    write_to_log_file "INFO" "Using analyzer image: ${img}"
+
+    if ! apply_manifest "${manifest}" "${INSTALL_NAMESPACE}" \
+        "image: .*jafra-analyzer.*" "${img}"; then
+        log_error "Failed to apply analyzer deployment"
+        return 1
+    fi
+
+    if ! wait_for_deployment "jafra-analyzer" "${INSTALL_NAMESPACE}" "${JAFRA_DEPLOY_TIMEOUT}"; then
+        log_error "Analyzer did not become ready"
+        return 1
+    fi
+
+    write_to_log_file "SUCCESS" "Analyzer is ready"
+    write_to_log_file "INFO"    "Analyzer API: kubectl -n ${INSTALL_NAMESPACE} port-forward svc/jafra-analyzer 8080:8080"
+    return 0
+}
+
+################################################################################
+# uninstall_jafra_analyzer
+################################################################################
+uninstall_jafra_analyzer() {
+    write_to_log_file "INFO" "Deleting Jafra Analyzer..."
+    delete_manifest "${SCRIPT_DIR}/manifests/jafra/analyzer/deployment.yaml" "${INSTALL_NAMESPACE}"
+    write_to_log_file "SUCCESS" "Jafra Analyzer removed"
+}
+
+################################################################################
 # install_jafra
 # Main entry point — installs all Jafra components.
 ################################################################################
@@ -140,8 +176,8 @@ install_jafra() {
         return 0
     fi
 
-    if [[ -z "${JAFRA_CONTROLLER_IMAGE:-}" ]]; then
-        log_warn "Jafra: JAFRA_CONTROLLER_IMAGE not set — skipping (set in lib/images.env to enable)"
+    if [[ -z "${JAFRA_CONTROLLER_IMAGE:-}" ]] || [[ -z "${JAFRA_ANALYZER_IMAGE:-}" ]]; then
+        log_warn "Jafra: JAFRA_CONTROLLER_IMAGE or JAFRA_ANALYZER_IMAGE not set — skipping (set in lib/images.env to enable)"
         return 0
     fi
 
@@ -158,7 +194,12 @@ install_jafra() {
         return 1
     fi
 
-    write_to_log_file "SUCCESS" "Jafra Controller installed"
+    if ! install_jafra_analyzer; then
+        log_error "Failed to install Jafra analyzer"
+        return 1
+    fi
+
+    write_to_log_file "SUCCESS" "Jafra Ecosystem installed (Controller + Analyzer)"
     write_to_log_file "INFO"    "To enable JFR profiling on a pod, add:"
     write_to_log_file "INFO"    "  labels:"
     write_to_log_file "INFO"    "    jafra.io/enabled: \"true\""
@@ -180,11 +221,12 @@ uninstall_jafra() {
         return 0
     fi
 
-    if [[ -z "${JAFRA_CONTROLLER_IMAGE:-}" ]]; then
+    if [[ -z "${JAFRA_CONTROLLER_IMAGE:-}" ]] && [[ -z "${JAFRA_ANALYZER_IMAGE:-}" ]]; then
         write_to_log_file "INFO" "Jafra: images not configured — nothing to uninstall"
         return 0
     fi
 
+    uninstall_jafra_analyzer
     uninstall_jafra_controller
 
     write_to_log_file "SUCCESS" "Jafra Ecosystem uninstalled"

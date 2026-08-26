@@ -226,6 +226,7 @@ validate_image_overrides() {
     _vi "${QUARKUS_MCP_IMAGE}"             "--quarkus-mcp-image"          "${QUARKUS_MCP_IMAGE_OVERRIDDEN:-false}"
     _vi "${CAUSA_MCP_IMAGE}"               "--causa-mcp-image"            "${CAUSA_MCP_IMAGE_OVERRIDDEN:-false}"
     _vi "${JAFRA_CONTROLLER_IMAGE}"        "--jafra-controller-image"     "${JAFRA_CONTROLLER_IMAGE_OVERRIDDEN:-false}"
+    _vi "${JAFRA_ANALYZER_IMAGE}"          "--jafra-analyzer-image"       "${JAFRA_ANALYZER_IMAGE_OVERRIDDEN:-false}"
 
     if [[ "${failed}" == "true" ]]; then
         log_error "Image validation failed. Correct the image format and retry."
