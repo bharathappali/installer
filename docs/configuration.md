@@ -22,6 +22,7 @@ For installation steps, see the [Installation Guide](installation.md).
 |---|---|---|
 | `INSTALL_TARGET` | `kind` | Target platform |
 | `INSTALL_NAMESPACE` | `causa-rca` | Namespace for all components |
+| `KUBE_CLI` | `kubectl` | kubectl binary to use (override when using a custom path) |
 | `KIND_CLUSTER_NAME` | `causa-rca` | Kind cluster name |
 | `KIND_REGISTRY_PORT` | `5001` | Local registry host port |
 | `DRY_RUN` | `false` | Set to `true` to validate without installing |

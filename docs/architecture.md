@@ -24,7 +24,7 @@ lib/
 manifests/
   k8s_mcp_server.yaml                   ← Kubernetes MCP Server (NodePort 30000)
   causa/deployment.yaml                 ← Causa Backend (NodePort 30001)
-  jafra_mcp/deployment.yaml             ← Jafra MCP Server (NodePort 30003)
+  jafra_mcp/deployment.yaml             ← Jafra MCP Server (NodePort 30003, Kind node only — not mapped to localhost)
   quarkus_mcp/deployment.yaml           ← Quarkus MCP Server (NodePort 30004)
   causa_mcp/deployment.yaml             ← Causa MCP Server (NodePort 30005)
   postgres/deployment.yaml              ← PostgreSQL + pgvector (ClusterIP)

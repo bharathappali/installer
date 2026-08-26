@@ -120,9 +120,11 @@ kind delete cluster --name causa-rca
 ./install.sh
 ```
 
-### Ports already in use (30000–30005)
+### Ports already in use (30000, 30001, 30004, 30005)
 
-After deleting a Kind cluster, gvproxy (Podman/Docker network proxy) may still hold the port bindings.
+After deleting a Kind cluster, gvproxy (Podman/Docker network proxy) may still hold the host port bindings.
+These are the four ports mapped to `localhost` in the Kind cluster config. Port 30003 (Jafra MCP) is a
+NodePort inside the cluster only and is not bound on the host.
 
 ```bash
 # Option 1 — restart the container runtime

@@ -2,7 +2,7 @@
 
 Deploys the full Causa RCA infrastructure stack onto a local [Kind](https://kind.sigs.k8s.io/) cluster in a single command.
 
-> **Scope:** Infrastructure only — Causa Backend and MCP servers. 
+> **Scope:** Infrastructure only — Causa Backend and MCP servers.
 
 ## What gets installed
 
