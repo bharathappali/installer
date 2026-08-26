@@ -302,6 +302,79 @@ post_component_validation() {
     fi
 }
 
+################################################################################
+# validate_prometheus_available
+# Checks that a Prometheus instance is reachable at the configured URL.
+#
+# On kind: Prometheus must have been deployed (via kube-prometheus-stack helm
+#          chart) before Quarkus MCP is installed.  Returns 1 and prints a
+#          clear install hint when it is absent.
+# On other targets (e.g. OpenShift): Prometheus is built-in; this check is
+#          skipped and the function returns 0 gracefully.
+################################################################################
+validate_prometheus_available() {
+    # Only enforce on kind — other platforms (OpenShift, etc.) ship Prometheus OOB.
+    if [[ "${INSTALL_TARGET:-kind}" != "kind" ]]; then
+        write_to_log_file "INFO" "Skipping Prometheus check on non-kind target (${INSTALL_TARGET:-unknown})"
+        return 0
+    fi
+
+    local prom_ns="${PROMETHEUS_NAMESPACE:-monitoring}"
+
+    write_to_log_file "INFO" "Checking Prometheus readiness (StatefulSet in ${prom_ns} namespace)..."
+
+    # Check for the kube-prometheus-stack Prometheus StatefulSet in PROMETHEUS_NAMESPACE
+    local ready_replicas total_replicas
+    if ! ${KUBE_CLI} get namespace "${prom_ns}" &>/dev/null; then
+        log_error "Prometheus check: '${prom_ns}' namespace not found."
+        log_error "Quarkus MCP requires Prometheus (kube-prometheus-stack) to be installed."
+        log_error "Install it with:"
+        log_error "  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts"
+        log_error "  helm repo update"
+        log_error "  helm install prometheus prometheus-community/kube-prometheus-stack \\"
+        log_error "    --namespace ${prom_ns} --create-namespace \\"
+        log_error "    --set prometheus.service.type=ClusterIP"
+        return 1
+    fi
+
+    # Find the Prometheus StatefulSet (kube-prometheus-stack naming convention)
+    local prom_sts
+    prom_sts=$(${KUBE_CLI} get statefulset -n "${prom_ns}" \
+        --no-headers -o custom-columns=NAME:.metadata.name 2>/dev/null \
+        | grep -E "^prometheus-" | head -1 || true)
+
+    if [[ -z "${prom_sts}" ]]; then
+        log_error "Prometheus check: no Prometheus StatefulSet found in '${prom_ns}' namespace."
+        log_error "Quarkus MCP requires Prometheus (kube-prometheus-stack) to be installed."
+        log_error "Install it with:"
+        log_error "  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts"
+        log_error "  helm repo update"
+        log_error "  helm install prometheus prometheus-community/kube-prometheus-stack \\"
+        log_error "    --namespace ${prom_ns} --create-namespace \\"
+        log_error "    --set prometheus.service.type=ClusterIP"
+        return 1
+    fi
+
+    # readyReplicas is absent from the JSON (not "0") when no pods are up — default explicitly.
+    ready_replicas=$(${KUBE_CLI} get statefulset "${prom_sts}" -n "${prom_ns}" \
+        -o jsonpath='{.status.readyReplicas}' 2>/dev/null)
+    ready_replicas="${ready_replicas:-0}"
+    total_replicas=$(${KUBE_CLI} get statefulset "${prom_sts}" -n "${prom_ns}" \
+        -o jsonpath='{.spec.replicas}' 2>/dev/null)
+    total_replicas="${total_replicas:-0}"
+
+    # A StatefulSet scaled to 0 is explicitly stopped — treat as not ready.
+    if [[ "${total_replicas}" -eq 0 ]] 2>/dev/null || [[ "${ready_replicas}" != "${total_replicas}" ]]; then
+        log_error "Prometheus StatefulSet '${prom_sts}' is not ready (${ready_replicas}/${total_replicas} replicas)."
+        log_error "Wait for Prometheus to become ready before installing Quarkus MCP."
+        log_error "  ${KUBE_CLI} rollout status statefulset/${prom_sts} -n ${prom_ns}"
+        return 1
+    fi
+
+    write_to_log_file "SUCCESS" "Prometheus is ready (${prom_sts}: ${ready_replicas}/${total_replicas})"
+    return 0
+}
+
 export -f validate_prerequisites
 export -f validate_docker_running
 export -f validate_cluster_access
@@ -309,3 +382,4 @@ export -f validate_image_format_silent
 export -f validate_image_format
 export -f validate_image_overrides
 export -f post_component_validation
+export -f validate_prometheus_available

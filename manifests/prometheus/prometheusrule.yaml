@@ -1,0 +1,217 @@
+# PrometheusRule for workloads managed by Causa RCA.
+# Namespace placeholder: PLACEHOLDER_NAMESPACE  (replaced by installer at apply time)
+#
+# Opt-in: only pods carrying the label  causa.ai/monitoring: "true"  are monitored.
+# Add this label to any workload you want Causa RCA to analyse:
+#   kubectl label pod <pod> causa.ai/monitoring=true -n PLACEHOLDER_NAMESPACE
+#   # or set it in your Deployment's pod template metadata.labels
+#
+# When any alert fires, Alertmanager POSTs the full payload to:
+#   http://causa-backend.PLACEHOLDER_NAMESPACE.svc.cluster.local:8080/api/v1/alerts
+# which triggers Causa Backend to start an RCA for the affected workload.
+#
+# The backend cooldown is 15 minutes — repeat_interval in the Alertmanager config
+# is set to 15m accordingly so the same firing alert is not re-sent before
+# a previous RCA has had time to complete.
+#
+# Required: Prometheus Operator must be installed (kube-prometheus-stack on Kind,
+# built-in User Workload Monitoring on OpenShift).
+#
+# Annotation keys consumed by Causa Backend's alert handler:
+#   annotations.workload_name  — identifies the workload in the diagnostic record
+#   annotations.pod_name       — pod that triggered the alert
+#   annotations.container_name — container within the pod
+#   annotations.namespace      — namespace of the affected workload
+#   annotations.summary        — included in the RCA context sent to the LLM
+#   annotations.diagnostic_hint — structured signal passed to the LLM
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: causa-rca-alerts
+  namespace: PLACEHOLDER_NAMESPACE
+  labels:
+    # Picked up by the Prometheus Operator when ruleSelector: {} is set
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: causa-rca.rules
+      # Evaluate every 15 minutes — aligned with the Causa Backend cooldown period
+      # so a re-fired alert is not sent before the previous RCA has completed.
+      interval: 15m
+      rules:
+
+        # ── High Memory Usage ──────────────────────────────────────────────
+        # Proactive alert: fires when a monitored container exceeds 80% of its
+        # memory limit. Triggers RCA before the container is OOMKilled.
+        - alert: CausaAppHighMemoryUsage
+          expr: |
+            (
+              sum by (namespace, pod, container) (
+                container_memory_working_set_bytes{
+                  container!="",
+                  container!="POD",
+                  namespace="PLACEHOLDER_NAMESPACE"
+                }
+              )
+              /
+              sum by (namespace, pod, container) (
+                kube_pod_container_resource_limits{
+                  resource="memory",
+                  container!="",
+                  container!="POD",
+                  namespace="PLACEHOLDER_NAMESPACE"
+                }
+              )
+            ) > 0.80
+            and on(namespace, pod)
+            kube_pod_labels{
+              namespace="PLACEHOLDER_NAMESPACE",
+              label_causa_ai_monitoring="true"
+            }
+          for: 2m
+          labels:
+            severity: warning
+            namespace: PLACEHOLDER_NAMESPACE
+          annotations:
+            summary: "High memory usage in pod {{ $labels.pod }} ({{ $value | humanizePercentage }})"
+            description: >-
+              Container {{ $labels.container }} in pod {{ $labels.pod }}
+              (namespace {{ $labels.namespace }}) is using
+              {{ $value | humanizePercentage }} of its memory limit.
+              RCA will be triggered if this persists.
+            workload_name: "{{ $labels.container }}"
+            pod_name: "{{ $labels.pod }}"
+            container_name: "{{ $labels.container }}"
+            namespace: "{{ $labels.namespace }}"
+            diagnostic_hint: "high_memory_usage"
+
+        # ── OOMKilled ──────────────────────────────────────────────────────
+        # Reactive alert: fires when a monitored container was killed by the
+        # kernel OOM reaper. Indicates the memory limit was exceeded.
+        - alert: CausaAppOOMKilled
+          expr: |
+            kube_pod_container_status_last_terminated_reason{
+              reason="OOMKilled",
+              namespace="PLACEHOLDER_NAMESPACE"
+            } == 1
+            and on(namespace, pod)
+            kube_pod_labels{
+              namespace="PLACEHOLDER_NAMESPACE",
+              label_causa_ai_monitoring="true"
+            }
+          for: 0m
+          labels:
+            severity: critical
+            namespace: PLACEHOLDER_NAMESPACE
+          annotations:
+            summary: "Container OOMKilled: {{ $labels.container }} in pod {{ $labels.pod }}"
+            description: >-
+              Container {{ $labels.container }} in pod {{ $labels.pod }}
+              (namespace {{ $labels.namespace }}) exceeded its memory limit
+              and was killed by the kernel OOM reaper.
+            workload_name: "{{ $labels.container }}"
+            pod_name: "{{ $labels.pod }}"
+            container_name: "{{ $labels.container }}"
+            namespace: "{{ $labels.namespace }}"
+            diagnostic_hint: "oom_killed"
+
+        # ── CrashLoopBackOff ───────────────────────────────────────────────
+        # Fires when a monitored pod restarts more than twice in 10 minutes.
+        - alert: CausaAppCrashLoopBackOff
+          expr: |
+            increase(
+              kube_pod_container_status_restarts_total{
+                namespace="PLACEHOLDER_NAMESPACE"
+              }[10m]
+            ) > 2
+            and on(namespace, pod)
+            kube_pod_labels{
+              namespace="PLACEHOLDER_NAMESPACE",
+              label_causa_ai_monitoring="true"
+            }
+          for: 0m
+          labels:
+            severity: critical
+            namespace: PLACEHOLDER_NAMESPACE
+          annotations:
+            summary: "CrashLoopBackOff: pod {{ $labels.pod }} restarted {{ $value | humanize }} times in 10m"
+            description: >-
+              Pod {{ $labels.pod }} (namespace {{ $labels.namespace }}) has
+              restarted more than twice in the last 10 minutes.
+            workload_name: "{{ $labels.container }}"
+            pod_name: "{{ $labels.pod }}"
+            container_name: "{{ $labels.container }}"
+            namespace: "{{ $labels.namespace }}"
+            diagnostic_hint: "crash_loop_back_off"
+
+        # ── CPU Throttling ─────────────────────────────────────────────────
+        # Fires when a monitored container is throttled above 50% for 2 minutes.
+        - alert: CausaAppCPUThrottling
+          expr: |
+            (
+              rate(
+                container_cpu_cfs_throttled_periods_total{
+                  namespace="PLACEHOLDER_NAMESPACE",
+                  container!=""
+                }[5m]
+              )
+              /
+              rate(
+                container_cpu_cfs_periods_total{
+                  namespace="PLACEHOLDER_NAMESPACE",
+                  container!=""
+                }[5m]
+              )
+            ) > 0.5
+            and on(namespace, pod)
+            kube_pod_labels{
+              namespace="PLACEHOLDER_NAMESPACE",
+              label_causa_ai_monitoring="true"
+            }
+          for: 2m
+          labels:
+            severity: warning
+            namespace: PLACEHOLDER_NAMESPACE
+          annotations:
+            summary: "CPU throttling {{ $value | humanizePercentage }} on container {{ $labels.container }} in pod {{ $labels.pod }}"
+            description: >-
+              Container {{ $labels.container }} in pod {{ $labels.pod }}
+              (namespace {{ $labels.namespace }}) has more than 50% of its CPU
+              scheduling periods being throttled.
+            workload_name: "{{ $labels.container }}"
+            pod_name: "{{ $labels.pod }}"
+            container_name: "{{ $labels.container }}"
+            namespace: "{{ $labels.namespace }}"
+            diagnostic_hint: "cpu_throttling"
+
+        # ── Frequent Restarts ──────────────────────────────────────────────
+        # Fires when a monitored pod restarts more than 5 times in 30 minutes —
+        # indicates a persistent failure not caught by the CrashLoopBackOff rule.
+        - alert: CausaAppFrequentRestarts
+          expr: |
+            increase(
+              kube_pod_container_status_restarts_total{
+                namespace="PLACEHOLDER_NAMESPACE"
+              }[30m]
+            ) > 5
+            and on(namespace, pod)
+            kube_pod_labels{
+              namespace="PLACEHOLDER_NAMESPACE",
+              label_causa_ai_monitoring="true"
+            }
+          for: 0m
+          labels:
+            severity: warning
+            namespace: PLACEHOLDER_NAMESPACE
+          annotations:
+            summary: "Frequent restarts: pod {{ $labels.pod }} restarted {{ $value | humanize }} times in 30m"
+            description: >-
+              Pod {{ $labels.pod }} (namespace {{ $labels.namespace }}) has
+              restarted more than 5 times in 30 minutes. This suggests a
+              persistent failure or configuration issue.
+            workload_name: "{{ $labels.container }}"
+            pod_name: "{{ $labels.pod }}"
+            container_name: "{{ $labels.container }}"
+            namespace: "{{ $labels.namespace }}"
+            diagnostic_hint: "frequent_restarts"
