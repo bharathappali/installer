@@ -77,9 +77,10 @@ JAFRA_MCP_IMAGE="${JAFRA_MCP_IMAGE:-}"
 QUARKUS_MCP_IMAGE="${QUARKUS_MCP_IMAGE:-}"
 CAUSA_MCP_IMAGE="${CAUSA_MCP_IMAGE:-}"
 JAFRA_CONTROLLER_IMAGE="${JAFRA_CONTROLLER_IMAGE:-}"
+JAFRA_ANALYZER_IMAGE="${JAFRA_ANALYZER_IMAGE:-}"
 export K8S_MCP_SERVER_IMAGE CAUSA_BACKEND_IMAGE
 export JAFRA_MCP_IMAGE QUARKUS_MCP_IMAGE CAUSA_MCP_IMAGE
-export JAFRA_CONTROLLER_IMAGE
+export JAFRA_CONTROLLER_IMAGE JAFRA_ANALYZER_IMAGE
 
 # Sentinel flags — set to "true" only when a CLI flag explicitly overrides an image
 K8S_MCP_SERVER_IMAGE_OVERRIDDEN=false
@@ -88,9 +89,10 @@ JAFRA_MCP_IMAGE_OVERRIDDEN=false
 QUARKUS_MCP_IMAGE_OVERRIDDEN=false
 CAUSA_MCP_IMAGE_OVERRIDDEN=false
 JAFRA_CONTROLLER_IMAGE_OVERRIDDEN=false
+JAFRA_ANALYZER_IMAGE_OVERRIDDEN=false
 export K8S_MCP_SERVER_IMAGE_OVERRIDDEN CAUSA_BACKEND_IMAGE_OVERRIDDEN
 export JAFRA_MCP_IMAGE_OVERRIDDEN QUARKUS_MCP_IMAGE_OVERRIDDEN CAUSA_MCP_IMAGE_OVERRIDDEN
-export JAFRA_CONTROLLER_IMAGE_OVERRIDDEN
+export JAFRA_CONTROLLER_IMAGE_OVERRIDDEN JAFRA_ANALYZER_IMAGE_OVERRIDDEN
 
 # ---------------------------------------------------------------------------
 # Source library files
@@ -479,6 +481,7 @@ show_usage() {
     echo "    --quarkus-mcp-image IMAGE                  Override Quarkus MCP Server image"
     echo "    --causa-mcp-image IMAGE                    Override Causa MCP Server image"
     echo "    --jafra-controller-image IMAGE             Override Jafra Controller image"
+    echo "    --jafra-analyzer-image IMAGE               Override Jafra Analyzer image"
     echo ""
     echo "ENVIRONMENT VARIABLES:"
     echo "    INSTALL_TARGET                Target platform (kind)"
@@ -559,6 +562,9 @@ parse_arguments() {
             --jafra-controller-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --jafra-controller-image"; show_usage; exit 2; }
                 JAFRA_CONTROLLER_IMAGE="$2"; JAFRA_CONTROLLER_IMAGE_OVERRIDDEN=true; shift 2 ;;
+            --jafra-analyzer-image)
+                [[ -z "${2:-}" ]] && { log_error "Value required for --jafra-analyzer-image"; show_usage; exit 2; }
+                JAFRA_ANALYZER_IMAGE="$2"; JAFRA_ANALYZER_IMAGE_OVERRIDDEN=true; shift 2 ;;
             -h|--help)
                 show_usage; exit 0 ;;
             *)
