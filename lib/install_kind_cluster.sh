@@ -82,19 +82,44 @@ _start_local_registry() {
 }
 
 # _check_ports_available — fails with a clear message if any required host port is in use.
-# Only checks the Kind node ports (30000-30005). Registry port is excluded because
-# _start_local_registry runs first and manages port ${KIND_REGISTRY_PORT} idempotently.
+# Only checks the four host-mapped Kind node ports (30000, 30001, 30004, 30005). Port 30003
+# (Jafra MCP) has no hostPort mapping and is not bound on the host. Registry port is
+# excluded because _start_local_registry runs first and manages it idempotently.
+#
+# gvproxy / rootlessport stale-lease exception (Linux rootless Podman only):
+#   After all containers that owned a port mapping are removed, gvproxy keeps the
+#   TCP listener alive as a stale lease for the remainder of the session.  When Kind
+#   creates a new cluster it talks to the same gvproxy instance and reclaims those
+#   leases successfully.  We suppress the hard-fail ONLY when the port is held by
+#   gvproxy/rootlessport AND no running container is currently publishing that port —
+#   confirming it is truly a stale lease rather than an active conflict.
 _check_ports_available() {
     local ports=(30000 30001 30004 30005)
     local blocked=()
+    local runtime="${CONTAINER_RUNTIME:-docker}"
 
     for port in "${ports[@]}"; do
         if lsof -iTCP:"${port}" -sTCP:LISTEN &>/dev/null 2>&1; then
             local owner
             owner=$(lsof -iTCP:"${port}" -sTCP:LISTEN -n -P 2>/dev/null \
                         | awk 'NR==2{print $1" (pid "$2")"}')
-            blocked+=("${port} — in use by ${owner:-unknown process}")
-            write_to_log_file "ERROR" "Port ${port} already in use: ${owner:-unknown}"
+            # Stale gvproxy/rootlessport lease: the proxy holds the listener but
+            # no running container is actively publishing this port — Kind will
+            # successfully reclaim the lease.  Only suppress if confirmed stale.
+            if echo "${owner}" | grep -qiE 'rootless|gvproxy'; then
+                local active_container
+                active_container=$(${runtime} ps --format '{{.Ports}}' 2>/dev/null \
+                    | grep -c "0\.0\.0\.0:${port}->\|127\.0\.0\.1:${port}->" || true)
+                if [[ "${active_container:-0}" -eq 0 ]]; then
+                    write_to_log_file "INFO" "Port ${port} held by gvproxy/rootlessport (${owner}) with no active container — stale lease, Kind will reuse it"
+                else
+                    blocked+=("${port} — in use by active container via ${owner:-rootlessport}")
+                    write_to_log_file "ERROR" "Port ${port} in use by a running container via ${owner:-unknown}"
+                fi
+            else
+                blocked+=("${port} — in use by ${owner:-unknown process}")
+                write_to_log_file "ERROR" "Port ${port} already in use: ${owner:-unknown}"
+            fi
         fi
     done
 
@@ -103,14 +128,8 @@ _check_ports_available() {
         for entry in "${blocked[@]}"; do
             log_error "  port ${entry}"
         done
-        log_error "This usually means a previous Kind cluster was deleted but its port"
-        log_error "mappings are still held by the Podman/Docker network proxy (gvproxy)."
-        log_error "Fix options:"
-        log_error "  1. Restart the container runtime:"
-        log_error "       podman machine stop && podman machine start"
-        log_error "     or restart Docker Desktop"
-        log_error "  2. Or reuse the existing cluster by re-running ./install.sh"
-        log_error "     (the installer is idempotent if the cluster already exists)"
+        log_error "This usually means another application is occupying a required port."
+        log_error "Free the ports above and re-run ./install.sh"
         return 1
     fi
     return 0
@@ -228,6 +247,22 @@ install_kind_cluster() {
             return 1
         fi
 
+        # Guard against orphaned node containers from a previous broken uninstall.
+        # Kind checks container names before creating — if a container named
+        # <cluster>-control-plane still exists (even in Exited state) because a
+        # prior `kind delete cluster` removed the Kind record but left the container
+        # behind, `kind create cluster` fails with "node(s) already exist".
+        # Match only the exact Kind node suffixes to avoid touching unrelated
+        # containers that happen to share the cluster-name prefix.
+        local orphaned
+        orphaned=$(${runtime} ps -a --format '{{.Names}}' 2>/dev/null \
+            | grep -E "^${KIND_CLUSTER_NAME}-(control-plane|worker[0-9]*)$" || true)
+        if [[ -n "${orphaned}" ]]; then
+            write_to_log_file "WARN" "Orphaned Kind node container(s) found — removing before cluster creation..."
+            echo "${orphaned}" | xargs ${runtime} rm -f >>"${LOG_FILE}" 2>&1 || true
+            write_to_log_file "SUCCESS" "Orphaned containers removed"
+        fi
+
         local kind_config
         kind_config=$(_write_kind_config)
         write_to_log_file "INFO" "Creating Kind cluster '${KIND_CLUSTER_NAME}'..."
@@ -266,27 +301,60 @@ uninstall_kind_cluster() {
 
     local runtime="${CONTAINER_RUNTIME:-docker}"
 
-    if _kind_cluster_exists; then
+    # ── Step 1: Capture cluster existence BEFORE removing containers ──────────
+    # _kind_cluster_exists uses `kind get clusters` which discovers clusters from
+    # their node containers.  We must check this BEFORE removing the containers,
+    # otherwise the check always returns false and `kind delete cluster` is
+    # skipped — leaving the kubeconfig context and Kind bookkeeping behind.
+    local cluster_existed=false
+    _kind_cluster_exists && cluster_existed=true
+
+    # ── Step 2: Force-remove Kind node containers to release host ports ───────
+    # Match only the exact Kind node suffixes (-control-plane, -worker, -worker2…)
+    # to avoid accidentally removing unrelated containers that share the cluster
+    # name prefix (e.g. causa-rca-helper when cluster is named causa-rca).
+    #
+    # Port-release behaviour differs by OS/runtime:
+    #   macOS (Podman VM):  removing the container is sufficient for gvproxy to
+    #     drop the port lease immediately.
+    #   Linux rootless Podman: gvproxy keeps port leases alive for the session;
+    #     _check_ports_available handles this by confirming no active container
+    #     holds the port before treating it as a stale lease.
+    local node_containers
+    node_containers=$(${runtime} ps -a --format '{{.Names}}' 2>/dev/null \
+        | grep -E "^${KIND_CLUSTER_NAME}-(control-plane|worker[0-9]*)$" || true)
+    if [[ -n "${node_containers}" ]]; then
+        write_to_log_file "INFO" "Force-removing Kind node containers to release host ports..."
+        echo "${node_containers}" | xargs ${runtime} rm -f >>"${LOG_FILE}" 2>&1 || true
+        write_to_log_file "SUCCESS" "Kind node containers removed (ports 30000/30001/30004/30005 freed)"
+    fi
+
+    # ── Step 3: Delete the cluster record from kind's bookkeeping ─────────────
+    # Use the existence flag captured in Step 1 — not a fresh check — because
+    # the node containers are already gone and kind get clusters would return
+    # false even for a cluster that was genuinely present.
+    if [[ "${cluster_existed}" == "true" ]]; then
         write_to_log_file "INFO" "Deleting Kind cluster '${KIND_CLUSTER_NAME}'..."
-        kind delete cluster --name "${KIND_CLUSTER_NAME}" >>"${LOG_FILE}" 2>&1
+        if ! kind delete cluster --name "${KIND_CLUSTER_NAME}" >>"${LOG_FILE}" 2>&1; then
+            # node containers are already removed above; kind delete may emit a
+            # harmless "node not found" error — treat that as success, fail on
+            # anything else.
+            local delete_log
+            delete_log=$(tail -5 "${LOG_FILE}" 2>/dev/null || true)
+            if echo "${delete_log}" | grep -qiE 'not found|no nodes'; then
+                write_to_log_file "INFO" "kind delete cluster: nodes already absent — kubeconfig cleanup completed"
+            else
+                log_error "kind delete cluster failed — kubeconfig context may be stale"
+                log_error "Run manually: kind delete cluster --name ${KIND_CLUSTER_NAME}"
+                return 1
+            fi
+        fi
         write_to_log_file "SUCCESS" "Kind cluster '${KIND_CLUSTER_NAME}' deleted"
     else
         write_to_log_file "INFO" "Kind cluster '${KIND_CLUSTER_NAME}' not found — nothing to delete"
     fi
 
-    # kind delete cluster stops the control-plane container but does not remove it.
-    # On Podman/macOS, gvproxy re-acquires the port bindings of any Exited container,
-    # so a subsequent install attempt fails with "port already in use".
-    # Explicitly remove any leftover Kind node containers for this cluster.
-    local node_containers
-    node_containers=$(${runtime} ps -a --format '{{.Names}}' 2>/dev/null \
-        | grep "^${KIND_CLUSTER_NAME}-" || true)
-    if [[ -n "${node_containers}" ]]; then
-        write_to_log_file "INFO" "Removing leftover Kind node containers to free host ports..."
-        echo "${node_containers}" | xargs ${runtime} rm -f >>"${LOG_FILE}" 2>&1 || true
-        write_to_log_file "SUCCESS" "Kind node containers removed"
-    fi
-
+    # ── Step 4: Remove the local registry ────────────────────────────────────
     if _kind_registry_exists; then
         write_to_log_file "INFO" "Stopping and removing local registry '${KIND_REGISTRY_NAME}'..."
         ${runtime} stop "${KIND_REGISTRY_NAME}" >>"${LOG_FILE}" 2>&1 || true

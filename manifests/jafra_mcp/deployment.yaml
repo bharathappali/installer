@@ -28,21 +28,19 @@ spec:
               name: http
               protocol: TCP
           env:
-            - name: ASYNC_PROFILER_URL
-              value: "http://async-profiler.PLACEHOLDER_NAMESPACE.svc.cluster.local:8082"
             - name: MCP_SERVER_PORT
               value: "8083"
           livenessProbe:
             httpGet:
               path: /q/health/live
-              port: 8080
+              port: 8083
             initialDelaySeconds: 60
             periodSeconds: 15
             failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /q/health/ready
-              port: 8080
+              port: 8083
             initialDelaySeconds: 60
             periodSeconds: 10
             failureThreshold: 5
