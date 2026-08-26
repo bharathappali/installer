@@ -54,8 +54,10 @@ KUBE_CLI="${KUBE_CLI:-kubectl}"
 export KUBE_CLI
 
 # Target platform — determines which infrastructure steps run.
-# Supported values: kind
-# kind  → creates a Kind cluster + local registry + installs Prometheus stack
+# Supported values: kind | openshift
+#   kind       → creates a Kind cluster + local registry + installs Prometheus stack
+#   openshift  → connects to an existing OpenShift cluster; uses built-in UWM
+#                (no cluster creation, no Prometheus install, no cert-manager install)
 INSTALL_TARGET="${INSTALL_TARGET:-kind}"
 export INSTALL_TARGET
 
@@ -79,9 +81,12 @@ CAUSA_MCP_IMAGE="${CAUSA_MCP_IMAGE:-}"
 JAFRA_CONTROLLER_IMAGE="${JAFRA_CONTROLLER_IMAGE:-}"
 JAFRA_ANALYZER_IMAGE="${JAFRA_ANALYZER_IMAGE:-}"
 JAFRA_AGENT_IMAGE="${JAFRA_AGENT_IMAGE:-}"
+POSTGRES_KIND_IMAGE="${POSTGRES_KIND_IMAGE:-}"
+POSTGRES_OCP_IMAGE="${POSTGRES_OCP_IMAGE:-}"
 export K8S_MCP_SERVER_IMAGE CAUSA_BACKEND_IMAGE
 export JAFRA_MCP_IMAGE QUARKUS_MCP_IMAGE CAUSA_MCP_IMAGE
 export JAFRA_CONTROLLER_IMAGE JAFRA_ANALYZER_IMAGE JAFRA_AGENT_IMAGE
+export POSTGRES_KIND_IMAGE POSTGRES_OCP_IMAGE
 
 # Sentinel flags — set to "true" only when a CLI flag explicitly overrides an image
 K8S_MCP_SERVER_IMAGE_OVERRIDDEN=false
@@ -92,9 +97,12 @@ CAUSA_MCP_IMAGE_OVERRIDDEN=false
 JAFRA_CONTROLLER_IMAGE_OVERRIDDEN=false
 JAFRA_ANALYZER_IMAGE_OVERRIDDEN=false
 JAFRA_AGENT_IMAGE_OVERRIDDEN=false
+POSTGRES_KIND_IMAGE_OVERRIDDEN=false
+POSTGRES_OCP_IMAGE_OVERRIDDEN=false
 export K8S_MCP_SERVER_IMAGE_OVERRIDDEN CAUSA_BACKEND_IMAGE_OVERRIDDEN
 export JAFRA_MCP_IMAGE_OVERRIDDEN QUARKUS_MCP_IMAGE_OVERRIDDEN CAUSA_MCP_IMAGE_OVERRIDDEN
 export JAFRA_CONTROLLER_IMAGE_OVERRIDDEN JAFRA_ANALYZER_IMAGE_OVERRIDDEN JAFRA_AGENT_IMAGE_OVERRIDDEN
+export POSTGRES_KIND_IMAGE_OVERRIDDEN POSTGRES_OCP_IMAGE_OVERRIDDEN
 
 # ---------------------------------------------------------------------------
 # Source library files
@@ -104,6 +112,8 @@ source "${SCRIPT_DIR}/lib/install_utils.sh"
 source "${SCRIPT_DIR}/lib/validator.sh"
 source "${SCRIPT_DIR}/lib/install_kind_cluster.sh"
 source "${SCRIPT_DIR}/lib/install_prometheus.sh"
+source "${SCRIPT_DIR}/lib/install_openshift_infra.sh"
+source "${SCRIPT_DIR}/lib/install_openshift_monitoring.sh"
 source "${SCRIPT_DIR}/lib/install_cert_manager.sh"
 source "${SCRIPT_DIR}/lib/install_k8s_mcp.sh"
 source "${SCRIPT_DIR}/lib/install_jafra.sh"
@@ -150,6 +160,13 @@ initialize_logging() {
 ################################################################################
 _is_kind_target() {
     [[ "${INSTALL_TARGET}" == "kind" ]]
+}
+
+################################################################################
+# _is_openshift_target — returns 0 when the install target is openshift
+################################################################################
+_is_openshift_target() {
+    [[  "${INSTALL_TARGET}" == "openshift" ]]
 }
 
 ################################################################################
@@ -471,11 +488,12 @@ show_usage() {
     echo "Install or uninstall the Causa RCA stack."
     echo ""
     echo "OPTIONS:"
-    echo "    --target TARGET               Target platform: kind (default: kind)"
-    echo "                                  kind  — provisions a local Kind cluster"
+    echo "    --target TARGET               Target platform (default: kind)"
+    echo "                                    kind       — provisions a local Kind cluster"
+    echo "                                    openshift  — deploys into an existing OpenShift cluster"
     echo "    -n, --namespace NAMESPACE     Installation namespace (default: causa-rca)"
     echo "    -t, --terminate               Uninstall all components"
-    echo "    --delete-cluster              Also delete the Kind cluster when terminating"
+    echo "    --delete-cluster              Also delete the Kind cluster when terminating (kind only)"
     echo "    --dry-run                     Validate without making changes"
     echo "    -h, --help                    Display this help message"
     echo ""
@@ -533,9 +551,9 @@ parse_arguments() {
             --target)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --target"; show_usage; exit 2; }
                 case "$2" in
-                    kind) INSTALL_TARGET="$2" ;;
+                    kind|openshift) INSTALL_TARGET="$2" ;;
                     *)
-                        log_error "Unsupported target '${2}'. Currently supported: kind"
+                        log_error "Unsupported target '${2}'. Supported values: kind, openshift"
                         exit 2 ;;
                 esac
                 shift 2 ;;
@@ -578,6 +596,12 @@ parse_arguments() {
             --jafra-agent-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --jafra-agent-image"; show_usage; exit 2; }
                 JAFRA_AGENT_IMAGE="$2"; JAFRA_AGENT_IMAGE_OVERRIDDEN=true; shift 2 ;;
+            --postgres-kind-image)
+                [[ -z "${2:-}" ]] && { log_error "Value required for --postgres-kind-image"; show_usage; exit 2; }
+                POSTGRES_KIND_IMAGE="$2"; POSTGRES_KIND_IMAGE_OVERRIDDEN=true; shift 2 ;;
+            --postgres-ocp-image)
+                [[ -z "${2:-}" ]] && { log_error "Value required for --postgres-ocp-image"; show_usage; exit 2; }
+                POSTGRES_OCP_IMAGE="$2"; POSTGRES_OCP_IMAGE_OVERRIDDEN=true; shift 2 ;;
             -h|--help)
                 show_usage; exit 0 ;;
             *)
