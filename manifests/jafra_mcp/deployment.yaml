@@ -30,6 +30,8 @@ spec:
           env:
             - name: MCP_SERVER_PORT
               value: "8083"
+            - name: QUARKUS_HTTP_PORT
+              value: "8083"
           livenessProbe:
             httpGet:
               path: /q/health/live
