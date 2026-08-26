@@ -228,6 +228,21 @@ install_kind_cluster() {
             return 1
         fi
 
+        # Guard against orphaned node containers from a previous broken uninstall.
+        # Kind checks container names before creating — if a container named
+        # <cluster>-control-plane still exists (even in Exited state) because a
+        # prior `kind delete cluster` removed the Kind record but left the container
+        # behind, `kind create cluster` fails with "node(s) already exist".
+        local orphaned
+        orphaned=$(${CONTAINER_RUNTIME:-docker} ps -a --format '{{.Names}}' 2>/dev/null \
+            | grep "^${KIND_CLUSTER_NAME}-" \
+            | grep -v "^${KIND_REGISTRY_NAME}$" || true)
+        if [[ -n "${orphaned}" ]]; then
+            write_to_log_file "WARN" "Orphaned Kind node container(s) found — removing before cluster creation..."
+            echo "${orphaned}" | xargs ${CONTAINER_RUNTIME:-docker} rm -f >>"${LOG_FILE}" 2>&1 || true
+            write_to_log_file "SUCCESS" "Orphaned containers removed"
+        fi
+
         local kind_config
         kind_config=$(_write_kind_config)
         write_to_log_file "INFO" "Creating Kind cluster '${KIND_CLUSTER_NAME}'..."
@@ -276,9 +291,18 @@ uninstall_kind_cluster() {
     # Kind node containers are named: <cluster>-control-plane, <cluster>-worker,
     # <cluster>-worker2, etc.  The registry is named <cluster>-registry and must
     # NOT be matched here — it is handled separately in Step 4.
-    # Use `kind get nodes` which lists only the actual node containers.
+    #
+    # Important: we use `${runtime} ps -a` directly rather than `kind get nodes`
+    # because `kind get nodes` only lists containers that Kind's bookkeeping still
+    # knows about.  If the cluster was previously half-deleted (Kind record gone
+    # but the Podman/Docker container still present), `kind get nodes` returns
+    # nothing and the orphaned container is missed — causing `kind create cluster`
+    # on the next install to fail with "node(s) already exist for a cluster with
+    # the name <cluster>".
     local node_containers
-    node_containers=$(kind get nodes --name "${KIND_CLUSTER_NAME}" 2>/dev/null || true)
+    node_containers=$(${runtime} ps -a --format '{{.Names}}' 2>/dev/null \
+        | grep "^${KIND_CLUSTER_NAME}-" \
+        | grep -v "^${KIND_REGISTRY_NAME}$" || true)
     if [[ -n "${node_containers}" ]]; then
         write_to_log_file "INFO" "Force-removing Kind node containers to release host ports..."
         echo "${node_containers}" | xargs ${runtime} rm -f >>"${LOG_FILE}" 2>&1 || true
@@ -294,10 +318,9 @@ uninstall_kind_cluster() {
         write_to_log_file "INFO" "Kind cluster '${KIND_CLUSTER_NAME}' not found — nothing to delete"
     fi
 
-    # ── Step 3: Clean up any node containers that kind delete left behind ─────
-    # kind delete cluster may leave an Exited container; do a second pass using
-    # kind get nodes (returns empty once the cluster is gone, so this is safe).
-    # Explicitly exclude the registry container name as a safety net.
+    # ── Step 3: Second-pass cleanup after kind delete ─────────────────────────
+    # Step 1 already removed containers before kind delete ran. This pass catches
+    # anything kind delete itself may have re-created or left in an Exited state.
     local leftover
     leftover=$(${runtime} ps -a --format '{{.Names}}' 2>/dev/null \
         | grep "^${KIND_CLUSTER_NAME}-" \
