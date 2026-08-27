@@ -40,10 +40,6 @@ spec:
           envFrom:
             - secretRef:
                 name: postgres-credentials
-                # Secret created at install time by install_postgres() — not committed to source
-          args:
-            - -c
-            - shared_preload_libraries=vector
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "causa_backend", "-d", "iri-db"]

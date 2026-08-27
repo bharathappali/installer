@@ -1,11 +1,10 @@
-# NetworkPolicy — allow Alertmanager to POST alerts to the Causa Backend webhook.
+# NetworkPolicy — allow ingress to the Causa Backend pod on port 8080 from:
+#   1. Alertmanager (kube-prometheus-stack) in the monitoring namespace
+#   2. causa-mcp in the same namespace — it calls the backend REST API at startup
+#      and on every tool invocation; without this rule its traffic is silently
+#      dropped on clusters with a default-deny ingress NetworkPolicy.
+#
 # Namespace placeholder: PLACEHOLDER_NAMESPACE  (replaced by installer at apply time)
-#
-# Without this policy, clusters with a default-deny ingress NetworkPolicy will
-# silently drop the Alertmanager webhook calls to /api/v1/alerts on port 8080.
-#
-# Allows ingress to the Causa Backend pod (app=causa-backend) from:
-#   - The Prometheus monitoring namespace (kube-prometheus-stack Alertmanager)
 #
 # On OpenShift with User Workload Monitoring, also allow from
 # openshift-user-workload-monitoring — add that namespaceSelector if needed.
@@ -25,6 +24,13 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - podSelector:
+            matchLabels:
+              app: causa-mcp
       ports:
         - protocol: TCP
           port: 8080
