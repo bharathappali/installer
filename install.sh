@@ -112,8 +112,11 @@ source "${SCRIPT_DIR}/lib/install_utils.sh"
 source "${SCRIPT_DIR}/lib/validator.sh"
 source "${SCRIPT_DIR}/lib/install_kind_cluster.sh"
 source "${SCRIPT_DIR}/lib/install_prometheus.sh"
-source "${SCRIPT_DIR}/lib/install_openshift_infra.sh"
-source "${SCRIPT_DIR}/lib/install_openshift_monitoring.sh"
+# install_openshift_infra and install_openshift_monitoring are added in the
+# feat/openshift-infra PR — only source them when present so this branch
+# does not break on a clean checkout.
+[[ -f "${SCRIPT_DIR}/lib/install_openshift_infra.sh"      ]] && source "${SCRIPT_DIR}/lib/install_openshift_infra.sh"
+[[ -f "${SCRIPT_DIR}/lib/install_openshift_monitoring.sh" ]] && source "${SCRIPT_DIR}/lib/install_openshift_monitoring.sh"
 source "${SCRIPT_DIR}/lib/install_cert_manager.sh"
 source "${SCRIPT_DIR}/lib/install_k8s_mcp.sh"
 source "${SCRIPT_DIR}/lib/install_jafra.sh"
