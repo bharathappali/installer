@@ -74,36 +74,13 @@ install_causa_mcp() {
     local manifest="${SCRIPT_DIR}/manifests/causa_mcp/deployment.yaml"
     local img="${CAUSA_MCP_IMAGE}"
 
-    # On Kind, ClusterIP routing through the CNI bridge is unreliable on macOS
-    # hosts (Docker Desktop / Podman). Use the backend NodePort (localhost:30001)
-    # instead — reachable because the pod runs with hostNetwork:true, so
-    # kube-proxy NodePort rules on the node are always in effect.
-    # The URL is baked into the manifest before apply so no second rollout is
-    # triggered (a post-apply `kubectl set env` would cause a port conflict
-    # because hostNetwork:true binds port 8081 on the node).
-    local engine_url
-    if [[ "${INSTALL_TARGET:-kind}" == "kind" ]]; then
-        engine_url="http://localhost:30001"
-    else
-        engine_url="http://causa-backend.${INSTALL_NAMESPACE}.svc.cluster.local:8080"
-    fi
-    write_to_log_file "INFO" "CAUSA_ENGINE_URL → ${engine_url}"
-
     write_to_log_file "INFO" "Using image: ${img}"
 
-    local tmp; tmp=$(mktemp /tmp/causa-$$-causa-mcp-XXXXXX.yaml) || {
-        log_error "mktemp failed for causa-mcp manifest"
-        return 1
-    }
-    sed "s|PLACEHOLDER_ENGINE_URL|${engine_url}|g" "${manifest}" > "${tmp}"
-
-    if ! apply_manifest "${tmp}" "${INSTALL_NAMESPACE}" \
+    if ! apply_manifest "${manifest}" "${INSTALL_NAMESPACE}" \
         "image: .*causa-mcp.*" "${img}"; then
-        rm -f "${tmp}"
         log_error "Failed to apply Causa MCP manifest"
         return 1
     fi
-    rm -f "${tmp}"
 
     if ! wait_for_deployment "causa-mcp" "${INSTALL_NAMESPACE}" 300; then
         log_error "Causa MCP did not become ready"

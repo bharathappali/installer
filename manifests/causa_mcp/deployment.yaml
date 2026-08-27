@@ -11,11 +11,6 @@ metadata:
     app.kubernetes.io/component: causa-mcp
 spec:
   replicas: 1
-  # Recreate is required with hostNetwork:true — RollingUpdate causes a port
-  # conflict because the new pod tries to bind port 8081 on the node while the
-  # old pod still holds it.
-  strategy:
-    type: Recreate
   selector:
     matchLabels:
       app: causa-mcp
@@ -24,12 +19,6 @@ spec:
       labels:
         app: causa-mcp
     spec:
-      # hostNetwork gives the pod direct access to the node's network stack,
-      # which means NodePort routing (via kube-proxy on the node) is available
-      # at localhost. This avoids ClusterIP routing, which is unreliable on Kind
-      # clusters running inside Docker/Podman on macOS.
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: causa-mcp
           image: quay.io/causa-ai-hub/causa-mcp-server:0.0.1
@@ -38,13 +27,9 @@ spec:
               name: http
               protocol: TCP
           env:
-            # For Kind targets the installer substitutes PLACEHOLDER_ENGINE_URL
-            # with http://localhost:30001 (the causa-backend NodePort) so traffic
-            # goes through kube-proxy on the node's network stack rather than
-            # through the CNI bridge, which is unreliable on Kind / macOS.
-            # For all other targets it uses the ClusterIP DNS name.
+            # URL of the Causa Engine in the same namespace
             - name: CAUSA_ENGINE_URL
-              value: "PLACEHOLDER_ENGINE_URL"
+              value: "http://causa-backend.PLACEHOLDER_NAMESPACE.svc.cluster.local:8080"
           resources:
             requests:
               memory: "256Mi"
