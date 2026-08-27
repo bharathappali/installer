@@ -139,7 +139,7 @@ create_namespace() {
     fi
 
     if ! ${KUBE_CLI} create namespace "${ns}" >>"${LOG_FILE}" 2>&1; then
-        if ${KUBE_CLI} get namespace "${ns}" &>/dev/null; then
+        if ${KUBE_CLI} get namespace "${ns}" >>"${LOG_FILE}" 2>&1; then
             write_to_log_file "INFO" "Namespace ${ns} already exists (AlreadyExists returned by create)"
             return 0
         fi
