@@ -66,11 +66,11 @@ validate_prerequisites() {
         # Kind with KIND_EXPERIMENTAL_PROVIDER=docker against a Podman-backed
         # socket causes inspect template failures, so we must detect this case.
         local container_runtime=""
-        if check_command_exists "podman" && podman info &>/dev/null 2>&1; then
+        if check_command_exists "podman" && timeout 5s podman info &>/dev/null 2>&1; then
             container_runtime="podman"
-        elif check_command_exists "docker" && docker info &>/dev/null 2>&1; then
+        elif check_command_exists "docker" && timeout 5s docker info &>/dev/null 2>&1; then
             # Podman ships a docker-compat shim; detect it by checking the server name
-            if docker info --format '{{.ServerVersion}}' 2>/dev/null | grep -qi "podman"; then
+            if timeout 5s docker info --format '{{.ServerVersion}}' 2>/dev/null | grep -qi "podman"; then
                 container_runtime="podman"
             else
                 container_runtime="docker"
