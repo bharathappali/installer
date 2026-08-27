@@ -120,6 +120,13 @@ enable_cleanup_trap   # lib/install_utils.sh — log error on unexpected EXIT
 enable_spinner_trap   # lib/logging.sh       — stop spinner cleanly on INT/TERM
 
 # ---------------------------------------------------------------------------
+# Temp file cleanup — remove stale files from a previous crashed run.
+# Only removes files whose name encodes this process's PID, so a concurrent
+# installer invocation on the same host is not affected.
+# ---------------------------------------------------------------------------
+rm -f /tmp/causa-$$-*.yaml
+
+# ---------------------------------------------------------------------------
 # Logging initialisation
 # ---------------------------------------------------------------------------
 initialize_logging() {

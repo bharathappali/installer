@@ -66,7 +66,10 @@ _prometheus_already_installed() {
 # Prints the path to the temp file.
 ################################################################################
 _write_alertmanager_values() {
-    local values_file; values_file=$(mktemp /tmp/causa-prometheus-values-XXXXXX.yaml)
+    local values_file; values_file=$(mktemp /tmp/causa-prometheus-values-XXXXXX.yaml) || {
+        log_error "mktemp failed for /tmp/causa-prometheus-values-XXXXXX.yaml"
+        return 1
+    }
     local webhook_url; webhook_url=$(_causa_alertmanager_webhook_url)
 
     cat > "${values_file}" << YAML
@@ -185,7 +188,10 @@ install_prometheus() {
     fi
 
     # ── 4. Install or upgrade kube-prometheus-stack ──────────────────────────
-    local values_file; values_file=$(_write_alertmanager_values)
+    local values_file; values_file=$(_write_alertmanager_values) || {
+        log_error "Failed to write Alertmanager values file — aborting Prometheus install"
+        return 1
+    }
     write_to_log_file "INFO" "Alertmanager webhook URL: $(_causa_alertmanager_webhook_url)"
 
     if _prometheus_already_installed; then
