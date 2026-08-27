@@ -188,7 +188,10 @@ install_prometheus() {
     fi
 
     # ── 4. Install or upgrade kube-prometheus-stack ──────────────────────────
-    local values_file; values_file=$(_write_alertmanager_values) || return 1
+    local values_file; values_file=$(_write_alertmanager_values) || {
+        log_error "Failed to write Alertmanager values file — aborting Prometheus install"
+        return 1
+    }
     write_to_log_file "INFO" "Alertmanager webhook URL: $(_causa_alertmanager_webhook_url)"
 
     if _prometheus_already_installed; then
