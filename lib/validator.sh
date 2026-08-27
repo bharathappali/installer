@@ -31,6 +31,8 @@ validate_prerequisites() {
 
         if check_command_exists "oc"; then
             write_to_log_file "SUCCESS" "oc (OpenShift CLI) found: $(oc version --client --short 2>/dev/null || echo 'unknown')"
+            KUBE_CLI="oc"
+            export KUBE_CLI
         elif check_command_exists "kubectl"; then
             write_to_log_file "SUCCESS" "kubectl found (oc not present — some OpenShift-specific operations may need oc)"
             write_to_log_file "WARN" "Install oc: https://docs.openshift.com/container-platform/latest/cli_reference/openshift_cli/getting-started-cli.html"
