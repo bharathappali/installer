@@ -66,18 +66,19 @@ validate_prerequisites() {
         # Kind with KIND_EXPERIMENTAL_PROVIDER=docker against a Podman-backed
         # socket causes inspect template failures, so we must detect this case.
         local container_runtime=""
-        if check_command_exists "podman" && timeout 5s podman info &>/dev/null 2>&1; then
+        if check_command_exists "podman" && run_with_timeout 5 podman info &>/dev/null 2>&1; then
             container_runtime="podman"
-        elif check_command_exists "docker" && timeout 5s docker info &>/dev/null 2>&1; then
+        elif check_command_exists "docker" && run_with_timeout 5 docker info &>/dev/null 2>&1; then
             # Podman ships a docker-compat shim; detect it by checking the server name
-            if timeout 5s docker info --format '{{.ServerVersion}}' 2>/dev/null | grep -qi "podman"; then
+            if run_with_timeout 5 docker info --format '{{.ServerVersion}}' 2>/dev/null | grep -qi "podman"; then
                 container_runtime="podman"
             else
                 container_runtime="docker"
             fi
-        elif check_command_exists "docker"; then
-            container_runtime="docker"
         fi
+        # Note: intentionally no fallback that selects a runtime solely because
+        # its binary exists — if neither daemon responded to the timed probe the
+        # runtime is considered unavailable and the check below returns 1.
 
         local required_tools=("kubectl" "kind" "helm" "curl" "grep" "sed" "awk")
         [[ -z "${container_runtime}" ]] && required_tools+=("docker")  # will fail with a clear message
@@ -124,7 +125,7 @@ validate_docker_running() {
     local runtime="${CONTAINER_RUNTIME:-docker}"
     log_file_only "Validating container runtime (${runtime})"
 
-    if ! ${runtime} info &>/dev/null; then
+    if ! run_with_timeout 5 ${runtime} info &>/dev/null; then
         if [[ "${runtime}" == "podman" ]]; then
             log_error "Podman is not running or not reachable."
             log_error "Start the Podman machine:  podman machine start"
