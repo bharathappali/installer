@@ -82,6 +82,22 @@ install_causa_mcp() {
         return 1
     fi
 
+    # On Kind, ClusterIP routing through the CNI bridge is unreliable on macOS
+    # hosts (Docker Desktop / Podman). Patch CAUSA_ENGINE_URL to use the backend
+    # NodePort (localhost:30001) instead, which goes through kube-proxy on the
+    # node's network stack — reachable because the pod runs with hostNetwork:true.
+    if [[ "${INSTALL_TARGET:-kind}" == "kind" ]]; then
+        local engine_url="http://localhost:30001"
+        write_to_log_file "INFO" "Kind target: patching CAUSA_ENGINE_URL → ${engine_url}"
+        ${KUBE_CLI} set env deployment/causa-mcp \
+            -n "${INSTALL_NAMESPACE}" \
+            "CAUSA_ENGINE_URL=${engine_url}" >>"${LOG_FILE}" 2>&1 || {
+            log_error "Failed to patch CAUSA_ENGINE_URL on causa-mcp deployment"
+            return 1
+        }
+        write_to_log_file "SUCCESS" "CAUSA_ENGINE_URL patched to ${engine_url}"
+    fi
+
     if ! wait_for_deployment "causa-mcp" "${INSTALL_NAMESPACE}" 300; then
         log_error "Causa MCP did not become ready"
         return 1

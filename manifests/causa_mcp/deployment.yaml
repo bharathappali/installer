@@ -19,6 +19,12 @@ spec:
       labels:
         app: causa-mcp
     spec:
+      # hostNetwork gives the pod direct access to the node's network stack,
+      # which means NodePort routing (via kube-proxy on the node) is available
+      # at localhost. This avoids ClusterIP routing, which is unreliable on Kind
+      # clusters running inside Docker/Podman on macOS.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: causa-mcp
           image: quay.io/causa-ai-hub/causa-mcp-server:0.0.1
