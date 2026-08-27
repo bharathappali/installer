@@ -20,57 +20,97 @@ validate_prerequisites() {
     log_file_only "Validating Prerequisites"
 
     local missing=()
-    # Core tools always required
-    # Accept either docker or podman as the container runtime.
-    # When both are present, check whether 'docker' is a Podman shim/alias
-    # (common on macOS with Podman Desktop's docker-compat socket).  Running
-    # Kind with KIND_EXPERIMENTAL_PROVIDER=docker against a Podman-backed
-    # socket causes inspect template failures, so we must detect this case.
-    local container_runtime=""
-    if check_command_exists "podman" && podman info &>/dev/null 2>&1; then
-        container_runtime="podman"
-    elif check_command_exists "docker" && docker info &>/dev/null 2>&1; then
-        # Podman ships a docker-compat shim; detect it by checking the server name
-        if docker info --format '{{.ServerVersion}}' 2>/dev/null | grep -qi "podman"; then
-            container_runtime="podman"
+
+    if [[ "${INSTALL_TARGET:-kind}" == "openshift" ]]; then
+        # ── OpenShift target ─────────────────────────────────────────────────
+        # Required: oc OR kubectl, helm, curl, grep, sed, awk
+        # Not required: kind, docker/podman (no local cluster management)
+        # oc is preferred; kubectl is accepted as a fallback. Requiring kubectl
+        # unconditionally would reject valid OCP environments that have oc only.
+        local required_tools=("helm" "curl" "grep" "sed" "awk")
+
+        if check_command_exists "oc"; then
+            write_to_log_file "SUCCESS" "oc (OpenShift CLI) found: $(oc version --client --short 2>/dev/null || echo 'unknown')"
+            KUBE_CLI="oc"
+            export KUBE_CLI
+        elif check_command_exists "kubectl"; then
+            write_to_log_file "SUCCESS" "kubectl found (oc not present — some OpenShift-specific operations may need oc)"
+            write_to_log_file "WARN" "Install oc: https://docs.openshift.com/container-platform/latest/cli_reference/openshift_cli/getting-started-cli.html"
         else
+            log_error "Required tool not found: oc (or kubectl)"
+            missing+=("oc or kubectl")
+        fi
+
+        for tool in "${required_tools[@]}"; do
+            if ! check_command_exists "${tool}"; then
+                log_error "Required tool not found: ${tool}"
+                missing+=("${tool}")
+            else
+                write_to_log_file "SUCCESS" "${tool} found"
+            fi
+        done
+
+        if [[ ${#missing[@]} -gt 0 ]]; then
+            log_error "Missing required tools: ${missing[*]}"
+            log_error "Install them and retry."
+            log_error "  - oc:      https://docs.openshift.com/container-platform/latest/cli_reference/openshift_cli/getting-started-cli.html"
+            log_error "  - kubectl: https://kubernetes.io/docs/tasks/tools/"
+            log_error "  - helm:    https://helm.sh/docs/intro/install/"
+            return 1
+        fi
+    else
+        # ── Kind target ──────────────────────────────────────────────────────
+        # Accept either docker or podman as the container runtime.
+        # When both are present, check whether 'docker' is a Podman shim/alias
+        # (common on macOS with Podman Desktop's docker-compat socket).  Running
+        # Kind with KIND_EXPERIMENTAL_PROVIDER=docker against a Podman-backed
+        # socket causes inspect template failures, so we must detect this case.
+        local container_runtime=""
+        if check_command_exists "podman" && podman info &>/dev/null 2>&1; then
+            container_runtime="podman"
+        elif check_command_exists "docker" && docker info &>/dev/null 2>&1; then
+            # Podman ships a docker-compat shim; detect it by checking the server name
+            if docker info --format '{{.ServerVersion}}' 2>/dev/null | grep -qi "podman"; then
+                container_runtime="podman"
+            else
+                container_runtime="docker"
+            fi
+        elif check_command_exists "docker"; then
             container_runtime="docker"
         fi
-    elif check_command_exists "docker"; then
-        container_runtime="docker"
-    fi
 
-    local required_tools=("kubectl" "kind" "helm" "curl" "grep" "sed" "awk")
-    [[ -z "${container_runtime}" ]] && required_tools+=("docker")  # will fail with a clear message
+        local required_tools=("kubectl" "kind" "helm" "curl" "grep" "sed" "awk")
+        [[ -z "${container_runtime}" ]] && required_tools+=("docker")  # will fail with a clear message
 
-    for tool in "${required_tools[@]}"; do
-        if ! check_command_exists "${tool}"; then
-            log_error "Required tool not found: ${tool}"
-            missing+=("${tool}")
-        else
-            write_to_log_file "SUCCESS" "${tool} found"
+        for tool in "${required_tools[@]}"; do
+            if ! check_command_exists "${tool}"; then
+                log_error "Required tool not found: ${tool}"
+                missing+=("${tool}")
+            else
+                write_to_log_file "SUCCESS" "${tool} found"
+            fi
+        done
+
+        if [[ ${#missing[@]} -gt 0 ]]; then
+            log_error "Missing required tools: ${missing[*]}"
+            log_error "Install them and retry."
+            log_error "  - kind:    https://kind.sigs.k8s.io/docs/user/quick-start/#installation"
+            log_error "  - kubectl: https://kubernetes.io/docs/tasks/tools/"
+            log_error "  - helm:    https://helm.sh/docs/intro/install/"
+            return 1
         fi
-    done
 
-    if [[ ${#missing[@]} -gt 0 ]]; then
-        log_error "Missing required tools: ${missing[*]}"
-        log_error "Install them and retry."
-        log_error "  - kind:    https://kind.sigs.k8s.io/docs/user/quick-start/#installation"
-        log_error "  - kubectl: https://kubernetes.io/docs/tasks/tools/"
-        log_error "  - helm:    https://helm.sh/docs/intro/install/"
-        return 1
+        if [[ -z "${container_runtime}" ]]; then
+            log_error "No container runtime found. Install docker or podman."
+            log_error "  - docker: https://docs.docker.com/get-docker/"
+            log_error "  - podman: https://podman.io/getting-started/installation"
+            return 1
+        fi
+
+        # Export so other scripts can use the correct runtime
+        export CONTAINER_RUNTIME="${container_runtime}"
+        write_to_log_file "SUCCESS" "Container runtime: ${container_runtime}"
     fi
-
-    if [[ -z "${container_runtime}" ]]; then
-        log_error "No container runtime found. Install docker or podman."
-        log_error "  - docker: https://docs.docker.com/get-docker/"
-        log_error "  - podman: https://podman.io/getting-started/installation"
-        return 1
-    fi
-
-    # Export so other scripts can use the correct runtime
-    export CONTAINER_RUNTIME="${container_runtime}"
-    write_to_log_file "SUCCESS" "Container runtime: ${container_runtime}"
 
     log_validation_success "Validating Prerequisites"
     return 0
@@ -126,6 +166,8 @@ validate_cluster_access() {
     prev_ctx=$(${KUBE_CLI} config current-context 2>/dev/null || echo "")
 
     if [[ "${INSTALL_TARGET:-kind}" == "kind" ]]; then
+        # Switch to the kind-<cluster> context so an unrelated current context
+        # doesn't cause a hang or a misleading success.
         local kind_ctx="kind-${KIND_CLUSTER_NAME:-causa-rca}"
         if ${KUBE_CLI} config get-contexts "${kind_ctx}" &>/dev/null; then
             ${KUBE_CLI} config use-context "${kind_ctx}" >>"${LOG_FILE:-/dev/null}" 2>&1 || true
@@ -133,6 +175,17 @@ validate_cluster_access() {
         else
             log_error "Kind context '${kind_ctx}' not found in kubeconfig."
             log_error "The Kind cluster may not have been created yet — this should not happen at this stage."
+            return 1
+        fi
+    else
+        # OpenShift: trust the current kubeconfig context — the user is expected
+        # to already be logged in (oc login / KUBECONFIG set).
+        write_to_log_file "INFO" "OpenShift target — using current kubeconfig context (${prev_ctx:-none})"
+        if [[ -z "${prev_ctx}" ]]; then
+            log_error "No active kubeconfig context found."
+            log_error "Log in to your OpenShift cluster first:"
+            log_error "  oc login <api-url> --token=<token>"
+            log_error "  or: oc login <api-url> -u <user> -p <password>"
             return 1
         fi
     fi
@@ -144,13 +197,21 @@ validate_cluster_access() {
     local rc=0
     if ! ${KUBE_CLI} cluster-info --request-timeout=10s &>/dev/null; then
         log_error "Cannot reach the cluster API server (context: ${ctx})"
-        log_error "Ensure the Kind cluster is running:  kind get clusters"
+        if [[ "${INSTALL_TARGET:-kind}" == "kind" ]]; then
+            log_error "Ensure the Kind cluster is running:  kind get clusters"
+        else
+            log_error "Ensure you are logged in:  oc login <api-url>"
+        fi
         rc=1
     fi
 
-    if [[ -n "${prev_ctx}" && "${prev_ctx}" != "${ctx}" ]]; then
-        ${KUBE_CLI} config use-context "${prev_ctx}" >>"${LOG_FILE:-/dev/null}" 2>&1 || true
-        write_to_log_file "INFO" "Restored kubectl context to ${prev_ctx}"
+    # Restore previous context only for kind (on OpenShift we keep whatever
+    # context the user had — we never changed it).
+    if [[ "${INSTALL_TARGET:-kind}" == "kind" ]]; then
+        if [[ -n "${prev_ctx}" && "${prev_ctx}" != "${ctx}" ]]; then
+            ${KUBE_CLI} config use-context "${prev_ctx}" >>"${LOG_FILE:-/dev/null}" 2>&1 || true
+            write_to_log_file "INFO" "Restored kubectl context to ${prev_ctx}"
+        fi
     fi
 
     if [[ ${rc} -ne 0 ]]; then
@@ -228,6 +289,8 @@ validate_image_overrides() {
     _vi "${JAFRA_CONTROLLER_IMAGE}"        "--jafra-controller-image"     "${JAFRA_CONTROLLER_IMAGE_OVERRIDDEN:-false}"
     _vi "${JAFRA_ANALYZER_IMAGE}"          "--jafra-analyzer-image"       "${JAFRA_ANALYZER_IMAGE_OVERRIDDEN:-false}"
     _vi "${JAFRA_AGENT_IMAGE}"             "--jafra-agent-image"          "${JAFRA_AGENT_IMAGE_OVERRIDDEN:-false}"
+    _vi "${POSTGRES_KIND_IMAGE}"           "--postgres-kind-image"        "${POSTGRES_KIND_IMAGE_OVERRIDDEN:-false}"
+    _vi "${POSTGRES_OCP_IMAGE}"            "--postgres-ocp-image"         "${POSTGRES_OCP_IMAGE_OVERRIDDEN:-false}"
 
     if [[ "${failed}" == "true" ]]; then
         log_error "Image validation failed. Correct the image format and retry."
@@ -273,14 +336,39 @@ post_component_validation() {
         fi
     }
 
+    # On OpenShift, PostgreSQL is a CNPG Cluster — check the primary pod directly,
+    # not a Deployment (which doesn't exist on that target).
+    _check_postgres_ocp() {
+        local var="$1"
+        local phase
+        phase=$(${KUBE_CLI} get cluster.postgresql.cnpg.io iri-db \
+            -n "${INSTALL_NAMESPACE}" \
+            -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+        if [[ "${phase}" == "Cluster in healthy state" ]]; then
+            printf -v "${var}" '%b' "${COLOR_BOLD_GREEN}PostgreSQL (CNPG) ✓${COLOR_RESET}"
+            write_to_log_file "SUCCESS" "PostgreSQL (CNPG) is healthy"
+        elif [[ -n "${phase}" ]]; then
+            printf -v "${var}" '%b' "${COLOR_BOLD_RED}PostgreSQL (CNPG) ✗ — ${phase}${COLOR_RESET}"
+            write_to_log_file "ERROR" "PostgreSQL (CNPG) not healthy: ${phase}"
+            (( failed++ ))
+        else
+            printf -v "${var}" '%b' "${COLOR_YELLOW}PostgreSQL — not installed${COLOR_RESET}"
+            write_to_log_file "INFO" "PostgreSQL CNPG cluster not found (skipped)"
+        fi
+    }
+
     local k8s_mcp_status jafra_mcp_status quarkus_status postgres_status causa_status causa_mcp_status
 
     _check_deployment "Kubernetes MCP Server"  "kubernetes-mcp-server"  k8s_mcp_status
     _check_deployment "Jafra MCP Server"       "jafra-mcp"              jafra_mcp_status
-    _check_deployment "Quarkus MCP Server"         "mcp-metrics"            quarkus_status
-    _check_deployment "PostgreSQL"                 "postgres"               postgres_status
-    _check_deployment "Causa Backend"              "causa-backend"          causa_status
-    _check_deployment "Causa MCP Server"           "causa-mcp"              causa_mcp_status
+    _check_deployment "Quarkus MCP Server"     "mcp-metrics"            quarkus_status
+    if [[ "${INSTALL_TARGET:-kind}" == "openshift" ]]; then
+        _check_postgres_ocp postgres_status
+    else
+        _check_deployment "PostgreSQL"         "postgres"               postgres_status
+    fi
+    _check_deployment "Causa Backend"          "causa-backend"          causa_status
+    _check_deployment "Causa MCP Server"       "causa-mcp"              causa_mcp_status
 
     {
         echo ""

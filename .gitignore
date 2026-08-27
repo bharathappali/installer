@@ -33,3 +33,15 @@ install.log
 # /tmp/causa-rca-manifest-*.yaml  (handled by mktemp, not in repo)
 # /tmp/kind-config-*.yaml         (handled by mktemp, not in repo)
 # /tmp/causa-prometheus-values-*.yaml (handled by mktemp, not in repo)
+
+# ── OpenShift TLS certificates / kubeconfig secrets ───────────────────────
+# CA bundles, client certs, and token files used for oc login — never commit.
+*.crt
+*.pem
+*.key
+*.p12
+*.pfx
+kubeconfig
+*-kubeconfig
+ocp-*.ca
+ocp-*.crt
