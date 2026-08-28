@@ -17,7 +17,7 @@ metadata:
   namespace: PLACEHOLDER_NAMESPACE
   labels:
     app.kubernetes.io/name: jafra-analyzer
-    app.kubernetes.io/version: "0.1.0"
+    app.kubernetes.io/version: "0.0.1"
 spec:
   replicas: 1
   selector:
@@ -27,11 +27,11 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: jafra-analyzer
-        app.kubernetes.io/version: "0.1.0"
+        app.kubernetes.io/version: "0.0.1"
     spec:
       containers:
         - name: analyzer
-          image: quay.io/causa-ai-hub/jafra-analyzer:0.1.0
+          image: quay.io/causa-ai-hub/jafra-analyzer:0.0.1
           imagePullPolicy: Always
           env:
             - name: JAVA_TOOL_OPTIONS
