@@ -110,7 +110,7 @@ manifests/
 
 ## Jafra
 
-**J**VM **A**dvanced **F**light **R**ecording with **A**sync-profiler — a continuous profiling ecosystem for Java workloads running in Kubernetes. Jafra injects [async-profiler](https://github.com/async-profiler/async-profiler) into opted-in Pods without requiring any application changes, collects rotated JFR chunks from the node, and centralises analysis. CPU, allocation, lock, GC, and compilation events land in the same `.jfr` file when `jfrsync=default` is enabled.
+**J**VM **A**dvanced **F**light **R**ecording with **A**sync-profiler — a continuous profiling ecosystem for Java workloads running in Kubernetes. Jafra injects [async-profiler](https://github.com/async-profiler/async-profiler) into opted-in Pods without requiring any application changes, collects rotated JFR chunks from the node, and centralises analysis. CPU, allocation, lock, GC, and compilation events land in the same `.jfr` file because the controller defaults to `jfrsync=default` — this is set by the controller, not by the installer.
 
 > **Kind only.** Jafra is not supported on OpenShift. Current release: `v0.0.1`.
 
@@ -145,7 +145,7 @@ jafra-analyzer  (Deployment, port 9090 gRPC / 8080 HTTP)
     │  serves /api/v1/recordings, /report, /summary
     ▼
 (optional) Jafra MCP Server  (NodePort 30003)
-    └─ LLM tool calls: get_jfr_summary, get_recording_report, …
+    └─ exposes JFR summaries and JMC reports from the analyzer to Causa over MCP
 ```
 
 To opt a Pod in, add to its metadata:
