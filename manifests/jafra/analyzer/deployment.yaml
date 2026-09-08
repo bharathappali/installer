@@ -8,7 +8,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 5Gi
+      storage: 10Gi # Change this based on the number of workloads / type of workloads being profiled
 ---
 apiVersion: apps/v1
 kind: Deployment
