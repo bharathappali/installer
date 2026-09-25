@@ -112,6 +112,7 @@ install_causa() {
         local ocp_dir="${SCRIPT_DIR}/manifests/openshift/causa"
 
         apply_manifest "${ocp_dir}/serviceaccount.yaml" "${INSTALL_NAMESPACE}" || return 1
+        apply_manifest "${SCRIPT_DIR}/manifests/causa/mcp-config.yaml" "${INSTALL_NAMESPACE}" || return 1
 
         # configmap contains PLACEHOLDER_NAMESPACE and PLACEHOLDER_QUARKUS_METRICS_BASE_URL
         local tmp_cm
@@ -160,6 +161,8 @@ install_causa() {
         write_to_log_file "INFO" "Route created for Causa Backend"
     else
         # ── kind path ─────────────────────────────────────────────────────────
+        apply_manifest "${SCRIPT_DIR}/manifests/causa/mcp-config.yaml" "${INSTALL_NAMESPACE}" || return 1
+
         # Build a temp manifest with all placeholders substituted (namespace,
         # cluster type, and the Quarkus metrics base URL).
         local manifest="${SCRIPT_DIR}/manifests/causa/deployment.yaml"
@@ -218,9 +221,11 @@ uninstall_causa() {
         delete_manifest "${ocp_dir}/deployment.yaml"     "${INSTALL_NAMESPACE}"
         delete_manifest "${ocp_dir}/service.yaml"        "${INSTALL_NAMESPACE}"
         delete_manifest "${ocp_dir}/configmap.yaml"      "${INSTALL_NAMESPACE}"
+        delete_manifest "${SCRIPT_DIR}/manifests/causa/mcp-config.yaml" "${INSTALL_NAMESPACE}"
         delete_manifest "${ocp_dir}/serviceaccount.yaml" "${INSTALL_NAMESPACE}"
     else
         delete_manifest "${SCRIPT_DIR}/manifests/causa/deployment.yaml" "${INSTALL_NAMESPACE}"
+        delete_manifest "${SCRIPT_DIR}/manifests/causa/mcp-config.yaml" "${INSTALL_NAMESPACE}"
     fi
 
     write_to_log_file "SUCCESS" "Causa Backend uninstalled"

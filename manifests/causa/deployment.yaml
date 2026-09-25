@@ -89,6 +89,10 @@ spec:
             limits:
               memory: "2Gi"
               cpu: "1000m"
+          volumeMounts:
+            - name: mcp-config
+              mountPath: /etc/causa
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /q/health/live
@@ -109,6 +113,10 @@ spec:
             timeoutSeconds: 5
             successThreshold: 1
             failureThreshold: 5
+      volumes:
+        - name: mcp-config
+          configMap:
+            name: causa-mcp-config
 ---
 apiVersion: v1
 kind: Service
