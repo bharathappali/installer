@@ -1,0 +1,231 @@
+---
+# Source: cryostat-k8s-multi-mcp/templates/serviceaccount.yaml
+# Namespace placeholder: PLACEHOLDER_NAMESPACE  (replaced by installer at apply time)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cryostat-mcp-cryostat-k8s-multi-mcp
+  namespace: PLACEHOLDER_NAMESPACE
+  labels:
+    helm.sh/chart: cryostat-k8s-multi-mcp-1.0.0
+    app.kubernetes.io/name: cryostat-k8s-multi-mcp
+    app.kubernetes.io/instance: cryostat-mcp
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: cryostat-mcp
+---
+# Source: cryostat-k8s-multi-mcp/templates/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cryostat-mcp-cryostat-k8s-multi-mcp
+  labels:
+    helm.sh/chart: cryostat-k8s-multi-mcp-1.0.0
+    app.kubernetes.io/name: cryostat-k8s-multi-mcp
+    app.kubernetes.io/instance: cryostat-mcp
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: cryostat-mcp
+rules:
+  # Permission to discover Cryostat Custom Resources
+  # Required for: Finding Cryostat instances and their target namespaces
+  - apiGroups:
+      - operator.cryostat.io
+    resources:
+      - cryostats
+    verbs:
+      - get      # Get individual CR details
+      - list     # List all CRs in the cluster
+      - watch    # Watch for CR changes in real-time
+
+  # Permission to discover Services
+  # Required for: Determining Cryostat service URLs for connection
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get      # Get individual service details
+      - list     # List services in namespaces
+---
+# Source: cryostat-k8s-multi-mcp/templates/clusterrolebinding.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cryostat-mcp-cryostat-k8s-multi-mcp
+  labels:
+    helm.sh/chart: cryostat-k8s-multi-mcp-1.0.0
+    app.kubernetes.io/name: cryostat-k8s-multi-mcp
+    app.kubernetes.io/instance: cryostat-mcp
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: cryostat-mcp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cryostat-mcp-cryostat-k8s-multi-mcp
+subjects:
+  - kind: ServiceAccount
+    name: cryostat-mcp-cryostat-k8s-multi-mcp
+    namespace: PLACEHOLDER_NAMESPACE
+---
+# Source: cryostat-k8s-multi-mcp/templates/service.yaml
+# Service exposes both MCP (SSE) and REST interfaces:
+# - MCP Server: /mcp (Streamable HTTP)
+# - MCP Server: /mcp/sse (Server-Sent Events)
+# - REST API: /api
+apiVersion: v1
+kind: Service
+metadata:
+  name: cryostat-mcp-cryostat-k8s-multi-mcp
+  namespace: PLACEHOLDER_NAMESPACE
+  labels:
+    helm.sh/chart: cryostat-k8s-multi-mcp-1.0.0
+    app.kubernetes.io/name: cryostat-k8s-multi-mcp
+    app.kubernetes.io/instance: cryostat-mcp
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: cryostat-mcp
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: cryostat-k8s-multi-mcp
+    app.kubernetes.io/instance: cryostat-mcp
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: http
+---
+# Source: cryostat-k8s-multi-mcp/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cryostat-mcp-cryostat-k8s-multi-mcp
+  namespace: PLACEHOLDER_NAMESPACE
+  labels:
+    helm.sh/chart: cryostat-k8s-multi-mcp-1.0.0
+    app.kubernetes.io/name: cryostat-k8s-multi-mcp
+    app.kubernetes.io/instance: cryostat-mcp
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: cryostat-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cryostat-k8s-multi-mcp
+      app.kubernetes.io/instance: cryostat-mcp
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /q/metrics
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
+      labels:
+        app.kubernetes.io/name: cryostat-k8s-multi-mcp
+        app.kubernetes.io/instance: cryostat-mcp
+    spec:
+      serviceAccountName: cryostat-mcp-cryostat-k8s-multi-mcp
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mcp-server
+          image: quay.io/cryostat/cryostat-mcp-k8s-mux:0.1.0-snapshot
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            # HTTP server port
+            - name: QUARKUS_HTTP_PORT
+              value: "8080"
+
+            # Logging configuration
+            - name: QUARKUS_LOG_LEVEL
+              value: "INFO"
+
+            # Console logging configuration
+            - name: QUARKUS_LOG_CONSOLE_ENABLE
+              value: "true"
+
+            # k8s-multi-mcp specific logging
+            - name: QUARKUS_LOG_CATEGORY__IO_CRYOSTAT_MCP_K8S__LEVEL
+              value: "DEBUG"
+
+            # Kubernetes client configuration
+            - name: QUARKUS_KUBERNETES_CLIENT_TRUST_CERTS
+              value: "true"
+
+            # Global TLS configuration for programmatic REST clients
+            - name: QUARKUS_TLS_TRUST_ALL
+              value: "true"
+
+            # Named TLS configuration for GraphQL clients
+            # Uses a named TLS configuration called "notls" for disabling verification
+            - name: QUARKUS_TLS_NOTLS_TRUST_ALL
+              value: "true"
+            - name: QUARKUS_TLS_NOTLS_HOSTNAME_VERIFICATION_ALGORITHM
+              value: "NONE"
+            # Optional static Authorization header for Cryostat instances. Per-invocation
+            # Cryostat-Authorization headers take precedence when supplied by an MCP client.
+            - name: K8S_MUX_AUTHORIZATION_HEADER
+              value: "K8S_MUX_AUTHORIZATION_HEADER_PLACEHOLDER"
+
+            - name: CRYOSTAT_MCP_TOOL_LEVEL
+              value: "ALL"
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /q/health/started
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 3
+            successThreshold: 1
+            failureThreshold: 30
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst
+      terminationGracePeriodSeconds: 30

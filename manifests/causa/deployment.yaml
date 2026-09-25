@@ -47,6 +47,18 @@ spec:
               value: "PLACEHOLDER_QUARKUS_METRICS_BASE_URL"
             - name: CAUSA_MCP_ASYNC_PROFILER_ENDPOINT
               value: "http://jafra-mcp.PLACEHOLDER_NAMESPACE.svc.cluster.local:8083"
+            - name: CAUSA_MCP_CRYOSTAT_ENDPOINT
+              value: "http://cryostat-mcp-cryostat-k8s-multi-mcp.PLACEHOLDER_NAMESPACE.svc.cluster.local:8080"
+            - name: CAUSA_MCP_CRYOSTAT_HEALTH_ENDPOINT
+              value: "http://cryostat-mcp-cryostat-k8s-multi-mcp.PLACEHOLDER_NAMESPACE.svc.cluster.local:8080"
+            - name: CAUSA_MCP_CRYOSTAT_HEALTH_PATH
+              value: "/q/health/ready"
+            - name: CAUSA_MCP_CRYOSTAT_TIMEOUT
+              value: "15000"
+            - name: CAUSA_MCP_CRYOSTAT_RETRY_DELAY
+              value: "5000"
+            - name: CAUSA_MCP_CRYOSTAT_MAX_RETRIES
+              value: "3"
             # ----------------------------------------------------------------
             # LLM configuration (optional — app starts without it)
             # Set via kubectl create secret or helm values in production

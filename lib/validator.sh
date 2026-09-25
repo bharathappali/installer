@@ -296,6 +296,7 @@ validate_image_overrides() {
     }
 
     _vi "${K8S_MCP_SERVER_IMAGE}"          "--k8s-mcp-server-image"       "${K8S_MCP_SERVER_IMAGE_OVERRIDDEN:-false}"
+    _vi "${CRYOSTAT_MCP_SERVER_IMAGE}"     "--cryostat-mcp-server-image"  "${CRYOSTAT_MCP_SERVER_IMAGE_OVERRIDDEN:-false}"
     _vi "${JAFRA_MCP_IMAGE}"               "--jafra-mcp-image"            "${JAFRA_MCP_IMAGE_OVERRIDDEN:-false}"
     _vi "${CAUSA_BACKEND_IMAGE}"           "--causa-backend-image"        "${CAUSA_BACKEND_IMAGE_OVERRIDDEN:-false}"
     _vi "${QUARKUS_MCP_IMAGE}"             "--quarkus-mcp-image"          "${QUARKUS_MCP_IMAGE_OVERRIDDEN:-false}"

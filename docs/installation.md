@@ -56,6 +56,7 @@ connects to whichever cluster your current `oc`/`kubectl` context points to.
 
 The following components are installed on OpenShift:
 - Kubernetes MCP Server
+- Cryostat MCP Server
 - Quarkus MCP Server
 - PostgreSQL via CloudNativePG operator
 - Causa
@@ -117,21 +118,23 @@ See [Configuration](configuration.md) for the full reference.
 2. Prometheus Stack (kube-prometheus-stack, `monitoring` namespace)
 3. cert-manager (installed from official release manifest via `kubectl apply -f`)
 4. Kubernetes MCP Server
-5. Jafra Ecosystem (Controller → Analyzer → Agent) _(skipped if images not set)_
-6. Jafra MCP Server _(skipped if image not set)_
-7. Quarkus MCP Server _(skipped if image not set)_
-8. PostgreSQL + pgvector
-9. Causa _(stamps MCP env vars + waits for rollout)_
-10. Causa MCP Server
+5. Cryostat MCP Server
+6. Jafra Ecosystem (Controller → Analyzer → Agent) _(skipped if images not set)_
+7. Jafra MCP Server _(skipped if image not set)_
+8. Quarkus MCP Server _(skipped if image not set)_
+9. PostgreSQL + pgvector
+10. Causa _(stamps MCP env vars + waits for rollout)_
+11. Causa MCP Server
 
 ### OpenShift
 
 1. OpenShift User Workload Monitoring enabled + Alertmanager webhook configured
 2. Kubernetes MCP Server + Route
-3. Quarkus MCP Server _(skipped if image not set)_
-4. PostgreSQL via CloudNativePG operator
-5. Causa Backend + Route _(stamps MCP env vars + waits for rollout)_
-6. Causa MCP Server + Route
+3. Cryostat MCP Server
+4. Quarkus MCP Server _(skipped if image not set)_
+5. PostgreSQL via CloudNativePG operator
+6. Causa Backend + Route _(stamps MCP env vars + waits for rollout)_
+7. Causa MCP Server + Route
 
 ## Uninstallation
 

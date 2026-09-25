@@ -65,6 +65,8 @@ Priority order (highest to lowest):
 | Flag | Component | Target |
 |---|---|---|
 | `--k8s-mcp-server-image IMAGE` | Kubernetes MCP Server | both |
+| `--cryostat-mcp-server-image IMAGE` | Cryostat MCP Server | both |
+| `--cryostat-auth-token TOKEN` | Cryostat MCP bearer token (minted if omitted) | both |
 | `--causa-backend-image IMAGE` | Causa | both |
 | `--quarkus-mcp-image IMAGE` | Quarkus MCP Server | both |
 | `--causa-mcp-image IMAGE` | Causa MCP Server | both |
@@ -80,6 +82,8 @@ Priority order (highest to lowest):
 | Variable | Component | Target |
 |---|---|---|
 | `K8S_MCP_SERVER_IMAGE` | Kubernetes MCP Server | both |
+| `CRYOSTAT_MCP_SERVER_IMAGE` | Cryostat MCP Server | both |
+| `CRYOSTAT_AUTH_TOKEN` | Cryostat MCP bearer token (minted if omitted) | both |
 | `CAUSA_BACKEND_IMAGE` | Causa | both |
 | `QUARKUS_MCP_IMAGE` | Quarkus MCP Server | both |
 | `CAUSA_MCP_IMAGE` | Causa MCP Server | both |

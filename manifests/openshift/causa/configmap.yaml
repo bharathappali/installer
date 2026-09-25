@@ -60,9 +60,9 @@ data:
   CAUSA_MCP_KRUIZE_TIMEOUT: "10000"
 
   # MCP Cryostat Configuration
-  CAUSA_MCP_CRYOSTAT_ENDPOINT: "http://cryostat-mcp:8000"
-  CAUSA_MCP_CRYOSTAT_HEALTH_ENDPOINT: "http://cryostat-mcp-api:8080"
-  CAUSA_MCP_CRYOSTAT_HEALTH_PATH: "/healthz"
+  CAUSA_MCP_CRYOSTAT_ENDPOINT: "http://cryostat-mcp-cryostat-k8s-multi-mcp:8080"
+  CAUSA_MCP_CRYOSTAT_HEALTH_ENDPOINT: "http://cryostat-mcp-cryostat-k8s-multi-mcp:8080"
+  CAUSA_MCP_CRYOSTAT_HEALTH_PATH: "/q/health/ready"
   CAUSA_MCP_CRYOSTAT_TIMEOUT: "15000"
   CAUSA_MCP_CRYOSTAT_RETRY_DELAY: "5000"
   CAUSA_MCP_CRYOSTAT_MAX_RETRIES: "3"
