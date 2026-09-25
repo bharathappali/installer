@@ -1,0 +1,15 @@
+apiVersion: operator.cryostat.io/v1beta2
+kind: Cryostat
+metadata:
+  name: cryostat-sample
+spec:
+  storageOptions:
+    emptyDir:
+      enabled: true
+  enableCertManager: true
+  enableAudit: true
+  trustedCertSecrets: []
+  eventTemplates: []
+  reportOptions:
+    replicas: 1
+  networkPolicies: {}

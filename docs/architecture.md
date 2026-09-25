@@ -19,6 +19,7 @@ lib/
   enable_monitoring.sh                  ← OpenShift UWM + Alertmanager webhook config (openshift only)
   install_cert_manager.sh               ← cert-manager via official release manifest (kind only)
   install_k8s_mcp.sh                    ← Kubernetes MCP Server
+  install_cryostat.sh                   ← Cryostat operator + instance
   install_cryostat_mcp.sh               ← Cryostat MCP Server
   install_jafra.sh                      ← Jafra Ecosystem (kind only)
   install_jafra_mcp.sh                  ← Jafra MCP Server (kind only)
@@ -28,6 +29,7 @@ lib/
   install_causa_mcp.sh                  ← Causa MCP Server
 manifests/
   k8s_mcp_server.yaml                   ← Kubernetes MCP Server (NodePort 30000)
+  cryostat_cr.yaml                      ← Cryostat custom resource
   cryostat_mcp_server.yaml              ← Cryostat MCP Server (ClusterIP)
   cryostat_mcp_client_rbac.yaml         ← Cryostat MCP client ServiceAccount
   causa/deployment.yaml                 ← Causa Backend (NodePort 30001, kind)
@@ -66,7 +68,8 @@ The `--target` flag (default: `kind`) controls which infrastructure steps run:
 | PostgreSQL | Standalone Deployment + pgvector | CloudNativePG operator via OLM Subscription |
 | Causa Backend | NodePort Service | Deployment + OpenShift Route |
 | Kubernetes MCP Server | NodePort Service | Deployment + OpenShift Route |
-| Cryostat MCP Server | ClusterIP | ClusterIP |
+| Cryostat | Operator bundle via `operator-sdk`; OLM installed if missing | Operator bundle via `operator-sdk` (OLM is built in) |
+| Cryostat MCP Server | ClusterIP, installed only when Cryostat is present | ClusterIP, installed only when Cryostat is present |
 | Quarkus MCP Server | NodePort Service | ClusterIP (OpenShift) |
 | Causa MCP Server | NodePort Service | Deployment + OpenShift Route |
 

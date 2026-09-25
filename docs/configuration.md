@@ -12,6 +12,7 @@ For installation steps, see the [Installation Guide](installation.md).
 | `-t, --terminate` | — | Uninstall all components |
 | `--delete-cluster` | — | Also delete the Kind cluster when terminating (kind only) |
 | `--dry-run` | — | Validate without making changes |
+| `--skip-cryostat` | — | Skip Cryostat and the Cryostat MCP Server |
 | `--cluster-name NAME` | `causa-rca` | Kind cluster name (kind only) |
 | `--registry-port PORT` | `5001` | Local registry host port (kind only) |
 | `-h, --help` | — | Print usage |
@@ -65,7 +66,9 @@ Priority order (highest to lowest):
 | Flag | Component | Target |
 |---|---|---|
 | `--k8s-mcp-server-image IMAGE` | Kubernetes MCP Server | both |
+| `--cryostat-bundle-image IMAGE` | Cryostat operator bundle | both |
 | `--cryostat-mcp-server-image IMAGE` | Cryostat MCP Server | both |
+| `--skip-cryostat` | Skip Cryostat and the Cryostat MCP Server | both |
 | `--cryostat-auth-token TOKEN` | Cryostat MCP bearer token (minted if omitted) | both |
 | `--causa-backend-image IMAGE` | Causa | both |
 | `--quarkus-mcp-image IMAGE` | Quarkus MCP Server | both |
@@ -82,8 +85,10 @@ Priority order (highest to lowest):
 | Variable | Component | Target |
 |---|---|---|
 | `K8S_MCP_SERVER_IMAGE` | Kubernetes MCP Server | both |
+| `CRYOSTAT_BUNDLE_IMAGE` | Cryostat operator bundle | both |
 | `CRYOSTAT_MCP_SERVER_IMAGE` | Cryostat MCP Server | both |
 | `CRYOSTAT_AUTH_TOKEN` | Cryostat MCP bearer token (minted if omitted) | both |
+| `SKIP_CRYOSTAT` | Set to `true` to skip Cryostat and the Cryostat MCP Server | both |
 | `CAUSA_BACKEND_IMAGE` | Causa | both |
 | `QUARKUS_MCP_IMAGE` | Quarkus MCP Server | both |
 | `CAUSA_MCP_IMAGE` | Causa MCP Server | both |

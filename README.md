@@ -8,6 +8,7 @@ Supports two target platforms: a local [Kind](https://kind.sigs.k8s.io/) cluster
 | Component | Kind | OpenShift | Access |
 |---|---|---|---|
 | Kubernetes MCP Server | ✓ | ✓ | NodePort 30000 (Kind) / Route (OpenShift) |
+| Cryostat | ✓ | ✓ | Operator + Cryostat instance in the install namespace |
 | Cryostat MCP Server | ✓ | ✓ | ClusterIP — in-cluster only |
 | Causa Backend | ✓ | ✓ | NodePort 30001 (Kind) / Route (OpenShift) |
 | Quarkus MCP Server | ✓ | ✓ | NodePort 30004 (Kind) / Route (OpenShift) |
@@ -25,6 +26,7 @@ Supports two target platforms: a local [Kind](https://kind.sigs.k8s.io/) cluster
 - [`kind`](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
 - [`kubectl`](https://kubernetes.io/docs/tasks/tools/)
 - [`helm`](https://helm.sh/docs/intro/install/) — required for the Prometheus Stack
+- [`operator-sdk`](https://sdk.operatorframework.io/docs/installation/) — required for Cryostat (skip with `--skip-cryostat`)
 - `curl`, `grep`, `sed`, `awk` — pre-installed on macOS and most Linux distributions
 
 
@@ -34,6 +36,7 @@ Supports two target platforms: a local [Kind](https://kind.sigs.k8s.io/) cluster
 - `curl`, `grep`, `sed`, `awk`
 - An active login to the target cluster (`oc login`)
 - `cert-manager` already installed in the cluster
+- [`operator-sdk`](https://sdk.operatorframework.io/docs/installation/) — required for Cryostat (skip with `--skip-cryostat`)
 - `python3` with `PyYAML` — required to merge the Alertmanager config (`pip3 install pyyaml`)
 
 ## Quickstart
@@ -90,6 +93,7 @@ lib/
   enable_monitoring.sh        # OpenShift UWM + Alertmanager webhook config (openshift only)
   install_cert_manager.sh     # cert-manager via official release manifest (kind only)
   install_k8s_mcp.sh          # Kubernetes MCP Server
+  install_cryostat.sh         # Cryostat operator + instance
   install_cryostat_mcp.sh     # Cryostat MCP Server
   install_jafra.sh            # Jafra Ecosystem — kind only
   install_jafra_mcp.sh        # Jafra MCP Server — kind only
@@ -99,6 +103,7 @@ lib/
   install_causa_mcp.sh        # Causa MCP Server
 manifests/
   k8s_mcp_server.yaml         # Kubernetes MCP Server (NodePort 30000)
+  cryostat_cr.yaml            # Cryostat custom resource
   cryostat_mcp_server.yaml    # Cryostat MCP Server (ClusterIP)
   cryostat_mcp_client_rbac.yaml  # Cryostat MCP client ServiceAccount
   causa/                      # Causa (NodePort 30001, kind)

@@ -28,6 +28,9 @@ validate_prerequisites() {
         # oc is preferred; kubectl is accepted as a fallback. Requiring kubectl
         # unconditionally would reject valid OCP environments that have oc only.
         local required_tools=("helm" "curl" "grep" "sed" "awk")
+        if [[ "${SKIP_CRYOSTAT:-false}" != "true" ]]; then
+            required_tools+=("operator-sdk")
+        fi
 
         if check_command_exists "oc"; then
             write_to_log_file "SUCCESS" "oc (OpenShift CLI) found: $(oc version --client --short 2>/dev/null || echo 'unknown')"
@@ -56,6 +59,7 @@ validate_prerequisites() {
             log_error "  - oc:      https://docs.openshift.com/container-platform/latest/cli_reference/openshift_cli/getting-started-cli.html"
             log_error "  - kubectl: https://kubernetes.io/docs/tasks/tools/"
             log_error "  - helm:    https://helm.sh/docs/intro/install/"
+            log_error "  - operator-sdk: https://sdk.operatorframework.io/docs/installation/  (or pass --skip-cryostat)"
             return 1
         fi
     else
@@ -81,6 +85,9 @@ validate_prerequisites() {
         # runtime is considered unavailable and the check below returns 1.
 
         local required_tools=("kubectl" "kind" "helm" "curl" "grep" "sed" "awk")
+        if [[ "${SKIP_CRYOSTAT:-false}" != "true" ]]; then
+            required_tools+=("operator-sdk")
+        fi
         [[ -z "${container_runtime}" ]] && required_tools+=("docker")  # will fail with a clear message
 
         for tool in "${required_tools[@]}"; do
@@ -98,6 +105,7 @@ validate_prerequisites() {
             log_error "  - kind:    https://kind.sigs.k8s.io/docs/user/quick-start/#installation"
             log_error "  - kubectl: https://kubernetes.io/docs/tasks/tools/"
             log_error "  - helm:    https://helm.sh/docs/intro/install/"
+            log_error "  - operator-sdk: https://sdk.operatorframework.io/docs/installation/  (or pass --skip-cryostat)"
             return 1
         fi
 
@@ -296,6 +304,7 @@ validate_image_overrides() {
     }
 
     _vi "${K8S_MCP_SERVER_IMAGE}"          "--k8s-mcp-server-image"       "${K8S_MCP_SERVER_IMAGE_OVERRIDDEN:-false}"
+    _vi "${CRYOSTAT_BUNDLE_IMAGE}"         "--cryostat-bundle-image"      "${CRYOSTAT_BUNDLE_IMAGE_OVERRIDDEN:-false}"
     _vi "${CRYOSTAT_MCP_SERVER_IMAGE}"     "--cryostat-mcp-server-image"  "${CRYOSTAT_MCP_SERVER_IMAGE_OVERRIDDEN:-false}"
     _vi "${JAFRA_MCP_IMAGE}"               "--jafra-mcp-image"            "${JAFRA_MCP_IMAGE_OVERRIDDEN:-false}"
     _vi "${CAUSA_BACKEND_IMAGE}"           "--causa-backend-image"        "${CAUSA_BACKEND_IMAGE_OVERRIDDEN:-false}"

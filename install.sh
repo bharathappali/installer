@@ -6,6 +6,7 @@
 # Provisions the target environment and deploys the full RCA stack:
 #   - Prometheus Stack (kube-prometheus-stack) + Alertmanager webhook → Causa
 #   - Kubernetes MCP Server
+#   - Cryostat (operator + instance)
 #   - Cryostat MCP Server
 #   - Jafra MCP Server
 #   - Quarkus MCP Server
@@ -89,7 +90,11 @@ export CAUSA_MCP_QUARKUS_METRICS_BASE_URL
 # Optional Cryostat bearer token. When unset, the installer creates
 # cryostat-mcp-client and mints a one-year token.
 CRYOSTAT_AUTH_TOKEN="${CRYOSTAT_AUTH_TOKEN:-}"
-export CRYOSTAT_AUTH_TOKEN
+# Cryostat operator bundle. Empty until images.env is sourced; CLI may override.
+CRYOSTAT_BUNDLE_IMAGE="${CRYOSTAT_BUNDLE_IMAGE:-}"
+# Skip the Cryostat operator, instance, and Cryostat MCP server.
+SKIP_CRYOSTAT="${SKIP_CRYOSTAT:-false}"
+export CRYOSTAT_AUTH_TOKEN CRYOSTAT_BUNDLE_IMAGE SKIP_CRYOSTAT
 
 # Image variables (populated by images.env; can be overridden via CLI flags)
 K8S_MCP_SERVER_IMAGE="${K8S_MCP_SERVER_IMAGE:-}"
@@ -112,6 +117,7 @@ export POSTGRES_KIND_IMAGE POSTGRES_OCP_IMAGE
 # Sentinel flags — set to "true" only when a CLI flag explicitly overrides an image
 K8S_MCP_SERVER_IMAGE_OVERRIDDEN=false
 CRYOSTAT_MCP_SERVER_IMAGE_OVERRIDDEN=false
+CRYOSTAT_BUNDLE_IMAGE_OVERRIDDEN=false
 CAUSA_BACKEND_IMAGE_OVERRIDDEN=false
 JAFRA_MCP_IMAGE_OVERRIDDEN=false
 QUARKUS_MCP_IMAGE_OVERRIDDEN=false
@@ -122,7 +128,7 @@ JAFRA_ANALYZER_IMAGE_OVERRIDDEN=false
 JAFRA_AGENT_IMAGE_OVERRIDDEN=false
 POSTGRES_KIND_IMAGE_OVERRIDDEN=false
 POSTGRES_OCP_IMAGE_OVERRIDDEN=false
-export K8S_MCP_SERVER_IMAGE_OVERRIDDEN CRYOSTAT_MCP_SERVER_IMAGE_OVERRIDDEN CAUSA_BACKEND_IMAGE_OVERRIDDEN
+export K8S_MCP_SERVER_IMAGE_OVERRIDDEN CRYOSTAT_MCP_SERVER_IMAGE_OVERRIDDEN CRYOSTAT_BUNDLE_IMAGE_OVERRIDDEN CAUSA_BACKEND_IMAGE_OVERRIDDEN
 export JAFRA_MCP_IMAGE_OVERRIDDEN QUARKUS_MCP_IMAGE_OVERRIDDEN PROMETHEUS_MCP_SERVER_IMAGE_OVERRIDDEN CAUSA_MCP_IMAGE_OVERRIDDEN
 export JAFRA_CONTROLLER_IMAGE_OVERRIDDEN JAFRA_ANALYZER_IMAGE_OVERRIDDEN JAFRA_AGENT_IMAGE_OVERRIDDEN
 export POSTGRES_KIND_IMAGE_OVERRIDDEN POSTGRES_OCP_IMAGE_OVERRIDDEN
@@ -138,6 +144,7 @@ source "${SCRIPT_DIR}/lib/install_prometheus.sh"
 source "${SCRIPT_DIR}/lib/enable_monitoring.sh"
 source "${SCRIPT_DIR}/lib/install_cert_manager.sh"
 source "${SCRIPT_DIR}/lib/install_k8s_mcp.sh"
+source "${SCRIPT_DIR}/lib/install_cryostat.sh"
 source "${SCRIPT_DIR}/lib/install_cryostat_mcp.sh"
 source "${SCRIPT_DIR}/lib/install_jafra.sh"
 source "${SCRIPT_DIR}/lib/install_jafra_mcp.sh"
@@ -383,16 +390,29 @@ main() {
     log_install_success "Kubernetes MCP Server"
     installed_components+=("Kubernetes MCP Server")
 
-    # ── Cryostat MCP Server (both targets; discovers existing Cryostat CRs) ─
-    start_spinner "Installing Cryostat MCP Server..."
-    if ! install_cryostat_mcp_server; then
-        stop_spinner
-        log_error "Failed to install Cryostat MCP Server"
+    # ── Cryostat operator + instance, then the MCP mux that routes to it ──
+    # Spinner for Cryostat itself is owned by maybe_install_cryostat.
+    # The MCP server is installed only when a Cryostat instance is available.
+    if ! maybe_install_cryostat; then
+        log_error "Failed to install Cryostat"
         exit 1
     fi
-    stop_spinner
-    log_install_success "Cryostat MCP Server"
-    installed_components+=("Cryostat MCP Server")
+    if [[ "${CRYOSTAT_INSTALLED:-false}" == "true" ]]; then
+        log_install_success "Cryostat"
+        installed_components+=("Cryostat")
+
+        start_spinner "Installing Cryostat MCP Server..."
+        if ! install_cryostat_mcp_server; then
+            stop_spinner
+            log_error "Failed to install Cryostat MCP Server"
+            exit 1
+        fi
+        stop_spinner
+        log_install_success "Cryostat MCP Server"
+        installed_components+=("Cryostat MCP Server")
+    else
+        write_to_log_file "INFO" "Cryostat MCP Server skipped because Cryostat was not installed"
+    fi
 
     # ── Step 5: Jafra Ecosystem (Controller + Analyzer + Agent) ─────────────
     # Not supported on OpenShift — skipped for that target.
@@ -554,6 +574,10 @@ uninstall_main() {
     uninstall_cryostat_mcp_server
     stop_spinner; log_uninstall_success "Cryostat MCP Server"
 
+    start_spinner "Uninstalling Cryostat..."
+    uninstall_cryostat
+    stop_spinner; log_uninstall_success "Cryostat"
+
     # Jafra MCP and Jafra Ecosystem are not installed on OpenShift — skip uninstall.
     if ! _is_openshift_target; then
         start_spinner "Uninstalling Jafra MCP Server..."
@@ -676,6 +700,7 @@ show_usage() {
     echo ""
     echo "IMAGE OVERRIDE OPTIONS:"
     echo "    --k8s-mcp-server-image IMAGE              Override Kubernetes MCP Server image"
+    echo "    --cryostat-bundle-image IMAGE             Override Cryostat operator bundle image"
     echo "    --cryostat-mcp-server-image IMAGE         Override Cryostat MCP Server image"
     echo "    --jafra-mcp-image IMAGE                    Override Jafra MCP Server image"
     echo "    --causa-backend-image IMAGE                Override Causa Backend image"
@@ -686,7 +711,8 @@ show_usage() {
     echo "    --jafra-analyzer-image IMAGE               Override Jafra Analyzer image"
     echo "    --jafra-agent-image IMAGE                  Override Jafra Agent image"
     echo ""
-    echo "CRYOSTAT MCP CONFIGURATION:"
+    echo "CRYOSTAT CONFIGURATION:"
+    echo "    --skip-cryostat                   Skip Cryostat and the Cryostat MCP Server"
     echo "    --cryostat-auth-token TOKEN       Cryostat service account token"
     echo "                                      (auto-generated if not provided)"
     echo ""
@@ -702,8 +728,10 @@ show_usage() {
     echo "    CAUSA_MCP_QUARKUS_METRICS_BASE_URL=URL"
     echo "                                  Base URL of the Quarkus app under analysis"
     echo "                                  (e.g. http://my-app.default.svc.cluster.local:8080)"
+    echo "    CRYOSTAT_BUNDLE_IMAGE         Override Cryostat operator bundle image"
     echo "    CRYOSTAT_MCP_SERVER_IMAGE     Override Cryostat MCP Server image"
     echo "    CRYOSTAT_AUTH_TOKEN           Cryostat service account token"
+    echo "    SKIP_CRYOSTAT=true            Skip Cryostat and the Cryostat MCP Server"
     echo ""
     echo "EXAMPLES:"
     echo "    # Full install on Kind (creates cluster + all components)"
@@ -759,9 +787,14 @@ parse_arguments() {
             --k8s-mcp-server-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --k8s-mcp-server-image"; show_usage; exit 2; }
                 K8S_MCP_SERVER_IMAGE="$2"; K8S_MCP_SERVER_IMAGE_OVERRIDDEN=true; shift 2 ;;
+            --cryostat-bundle-image)
+                [[ -z "${2:-}" ]] && { log_error "Value required for --cryostat-bundle-image"; show_usage; exit 2; }
+                CRYOSTAT_BUNDLE_IMAGE="$2"; CRYOSTAT_BUNDLE_IMAGE_OVERRIDDEN=true; shift 2 ;;
             --cryostat-mcp-server-image)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --cryostat-mcp-server-image"; show_usage; exit 2; }
                 CRYOSTAT_MCP_SERVER_IMAGE="$2"; CRYOSTAT_MCP_SERVER_IMAGE_OVERRIDDEN=true; shift 2 ;;
+            --skip-cryostat)
+                SKIP_CRYOSTAT="true"; shift ;;
             --cryostat-auth-token)
                 [[ -z "${2:-}" ]] && { log_error "Value required for --cryostat-auth-token"; show_usage; exit 2; }
                 CRYOSTAT_AUTH_TOKEN="$2"; shift 2 ;;

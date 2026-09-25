@@ -13,6 +13,7 @@ For a quick start, see the [README](../README.md).
 | `kind` | Local Kubernetes cluster | [kind.sigs.k8s.io](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) |
 | `kubectl` | Kubernetes CLI | [kubernetes.io](https://kubernetes.io/docs/tasks/tools/) |
 | `helm` | Prometheus Stack install | [helm.sh](https://helm.sh/docs/intro/install/) |
+| `operator-sdk` | Cryostat operator bundle | [operator-sdk](https://sdk.operatorframework.io/docs/installation/) |
 | `curl`, `grep`, `sed`, `awk` | Script utilities | Pre-installed on macOS and most Linux distributions |
 
 > **Podman users:** Both rootful and rootless modes are supported. On macOS, ensure the machine is allocated sufficient resources:
@@ -28,6 +29,7 @@ For a quick start, see the [README](../README.md).
 | `oc` (preferred) or `kubectl` | Cluster CLI | [OpenShift CLI](https://docs.openshift.com/container-platform/latest/cli_reference/openshift_cli/getting-started-cli.html) / [kubectl](https://kubernetes.io/docs/tasks/tools/) |
 | `helm`, `curl`, `grep`, `sed`, `awk` | Script utilities | Pre-installed on most Linux distributions |
 | `python3` + `PyYAML` | Alertmanager config merge | `pip3 install pyyaml` |
+| `operator-sdk` | Cryostat operator bundle | [operator-sdk](https://sdk.operatorframework.io/docs/installation/) |
 
 **Cluster prerequisites (must be in place before running the installer):**
 - Logged in to the cluster: `oc login <api-url>`
@@ -56,6 +58,7 @@ connects to whichever cluster your current `oc`/`kubectl` context points to.
 
 The following components are installed on OpenShift:
 - Kubernetes MCP Server
+- Cryostat (operator + instance)
 - Cryostat MCP Server
 - Quarkus MCP Server
 - PostgreSQL via CloudNativePG operator
@@ -118,23 +121,25 @@ See [Configuration](configuration.md) for the full reference.
 2. Prometheus Stack (kube-prometheus-stack, `monitoring` namespace)
 3. cert-manager (installed from official release manifest via `kubectl apply -f`)
 4. Kubernetes MCP Server
-5. Cryostat MCP Server
-6. Jafra Ecosystem (Controller → Analyzer → Agent) _(skipped if images not set)_
-7. Jafra MCP Server _(skipped if image not set)_
-8. Quarkus MCP Server _(skipped if image not set)_
-9. PostgreSQL + pgvector
-10. Causa _(stamps MCP env vars + waits for rollout)_
-11. Causa MCP Server
+5. Cryostat operator + instance _(skipped with `--skip-cryostat`; Kind installs OLM first when it is missing)_
+6. Cryostat MCP Server _(skipped when Cryostat is not installed)_
+7. Jafra Ecosystem (Controller → Analyzer → Agent) _(skipped if images not set)_
+8. Jafra MCP Server _(skipped if image not set)_
+9. Quarkus MCP Server _(skipped if image not set)_
+10. PostgreSQL + pgvector
+11. Causa _(stamps MCP env vars + waits for rollout)_
+12. Causa MCP Server
 
 ### OpenShift
 
 1. OpenShift User Workload Monitoring enabled + Alertmanager webhook configured
 2. Kubernetes MCP Server + Route
-3. Cryostat MCP Server
-4. Quarkus MCP Server _(skipped if image not set)_
-5. PostgreSQL via CloudNativePG operator
-6. Causa Backend + Route _(stamps MCP env vars + waits for rollout)_
-7. Causa MCP Server + Route
+3. Cryostat operator + instance _(skipped with `--skip-cryostat`)_
+4. Cryostat MCP Server _(skipped when Cryostat is not installed)_
+5. Quarkus MCP Server _(skipped if image not set)_
+6. PostgreSQL via CloudNativePG operator
+7. Causa Backend + Route _(stamps MCP env vars + waits for rollout)_
+8. Causa MCP Server + Route
 
 ## Uninstallation
 
